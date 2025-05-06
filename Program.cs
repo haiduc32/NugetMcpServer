@@ -7,16 +7,19 @@ using ModelContextProtocol.Server;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-// Логирование в консоль (stderr)
+// Console logging (stderr)
 builder.Logging.AddConsole(options =>
 {
     options.LogToStandardErrorThreshold = LogLevel.Trace;
 });
 
-// Регистрация MCP‑сервера и транспорта STDIO
+// Register MCP server and STDIO transport
 builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
     .WithToolsFromAssembly();
+
+// Register HttpClient for InterfaceLookupService
+builder.Services.AddSingleton<HttpClient>();
 
 await builder.Build().RunAsync();
