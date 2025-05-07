@@ -51,6 +51,11 @@ The server is configured using the .NET Generic Host with the following componen
 
 - `GetCurrentTime()` - Returns the current server time in ISO 8601 format (YYYY-MM-DDThh:mm:ssZ)
 
+### InterfaceLookupService
+
+- `GetInterfaceDefinition(packageId, interfaceName, version?)` - Extracts and returns the C# interface definition from a specified NuGet package
+- `ListInterfaces(packageId, version?)` - Lists all public interfaces available in a specified NuGet package
+
 ## Technical Details
 
 The application uses the ModelContextProtocol library (version 0.1.0-preview.9), which provides infrastructure for creating MCP-compatible servers. The server is configured to use standard input/output for communication with clients.

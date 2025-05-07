@@ -8,6 +8,27 @@ using System.Text.Json;
 
 namespace LocalMcpServer.Services;
 
+/// <summary>
+/// Model for interface information
+/// </summary>
+public class InterfaceInfo
+{
+    /// <summary>
+    /// Interface name (without namespace)
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Full interface name with namespace
+    /// </summary>
+    public string FullName { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Assembly name where interface is defined
+    /// </summary>
+    public string AssemblyName { get; set; } = string.Empty;
+}
+
 [McpServerToolType]
 public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, HttpClient httpClient)
 {
@@ -27,6 +48,146 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
             .ToList();
 
         return versions.Last();
+    }    /// <summary>
+    /// Helper method to download and extract a NuGet package
+    /// </summary>
+    /// <param name="packageId">NuGet package ID</param>
+    /// <param name="version">Package version</param>
+    /// <returns>Tuple containing temp folder path and nupkg file path</returns>
+    private async Task<(string TempFolder, string NupkgFile)> DownloadAndExtractPackageAsync(string packageId, string version)
+    {
+        // Create temporary paths with GUID to ensure uniqueness
+        var runId = Guid.NewGuid().ToString("N");
+        var tmpFolder = Path.Combine(Path.GetTempPath(), $"{packageId}-{version}-{runId}");
+        var nupkgFile = Path.Combine(Path.GetTempPath(), $"{packageId}-{version}-{runId}.nupkg");
+        Directory.CreateDirectory(tmpFolder);
+
+        // 1. Download .nupkg
+        var url = $"https://api.nuget.org/v3-flatcontainer/{packageId.ToLower()}/{version}/{packageId.ToLower()}.{version}.nupkg";
+        using (var stream = await httpClient.GetStreamAsync(url))
+        using (var fs = File.Create(nupkgFile))
+            await stream.CopyToAsync(fs);
+
+        // 2. Extract package
+        ZipFile.ExtractToDirectory(nupkgFile, tmpFolder);
+
+        return (tmpFolder, nupkgFile);
+    }
+
+    /// <summary>
+    /// Helper method to load and scan assemblies for interfaces
+    /// </summary>
+    /// <param name="dllPath">Path to DLL file</param>
+    /// <returns>Assembly if successfully loaded, null otherwise</returns>
+    private Assembly? LoadAssembly(string dllPath)
+    {
+        try
+        {
+            var raw = File.ReadAllBytes(dllPath);
+            return Assembly.Load(raw);
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Failed to load assembly: {DllPath}", dllPath);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Formats interface definition as a string
+    /// </summary>
+    /// <param name="interfaceType">Interface type</param>
+    /// <param name="assemblyName">Assembly name</param>
+    /// <returns>Formatted interface definition</returns>
+    private string FormatInterfaceDefinition(Type interfaceType, string assemblyName)
+    {
+        var sb = new StringBuilder()
+            .AppendLine($"// from {assemblyName}")
+            .AppendLine($"public interface {interfaceType.Name}")
+            .AppendLine("{");
+
+        foreach (var m in interfaceType.GetMethods())
+        {
+            var ps = string.Join(", ",
+                m.GetParameters().Select(p => $"{p.ParameterType.Name} {p.Name}"));
+            sb.AppendLine($"    {m.ReturnType.Name} {m.Name}({ps});");
+        }
+
+        sb.AppendLine("}");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Lists all public interfaces from a specified NuGet package
+    /// </summary>
+    /// <param name="packageId">NuGet package ID</param>
+    /// <param name="version">Optional package version (defaults to latest)</param>
+    /// <returns>List of interface information</returns>
+    [McpServerTool,
+     Description(
+       "Lists all public interfaces available in a specified NuGet package. " +
+       "Parameters: " +
+       "packageId — NuGet package ID; " +
+       "version (optional) — package version (defaults to latest)"
+     )]
+    public async Task<List<InterfaceInfo>> ListInterfaces(
+        string packageId,
+        string? version = null)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(packageId))
+                throw new ArgumentNullException(nameof(packageId));
+
+            if (string.IsNullOrEmpty(version))
+            {
+                version = await GetLatestVersion(packageId);
+            }
+
+            logger.LogInformation("Listing interfaces from package {PackageId} version {Version}",
+                packageId, version);
+
+            var result = new List<InterfaceInfo>();
+            var (tmpFolder, nupkgFile) = await DownloadAndExtractPackageAsync(packageId, version);
+
+            try
+            {
+                // Scan each DLL in the package
+                foreach (var dll in Directory.EnumerateFiles(tmpFolder, "*.dll", SearchOption.AllDirectories))
+                {
+                    var assembly = LoadAssembly(dll);
+                    if (assembly == null) continue;
+
+                    var assemblyName = Path.GetFileName(dll);
+                    var interfaces = assembly.GetTypes()
+                        .Where(t => t.IsInterface && t.IsPublic)
+                        .ToList();
+
+                    foreach (var iface in interfaces)
+                    {
+                        result.Add(new InterfaceInfo
+                        {
+                            Name = iface.Name,
+                            FullName = iface.FullName ?? string.Empty,
+                            AssemblyName = assemblyName
+                        });
+                    }
+                }
+
+                return result;
+            }
+            finally
+            {
+                // Cleanup: delete folder and .nupkg
+                try { Directory.Delete(tmpFolder, true); } catch { /* ignore */ }
+                try { File.Delete(nupkgFile); } catch { /* ignore */ }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error listing interfaces");
+            throw;
+        }
     }
 
     /// <summary>
@@ -39,16 +200,16 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
     ///   Interface name without namespace.
     ///   If not specified, will search for all interfaces in the assembly.
     /// </param>
-    /// /// <param name="version">
+    /// <param name="version">
     ///   (Optional) Version of the package. If not specified, the latest version will be used.
     /// </param>
     [McpServerTool,
      Description(
        "Extracts and returns the C# interface definition from a specified NuGet package. " +
        "Parameters: " +
-       "packageId � NuGet package ID; " +
-       "version (optional) � package version (defaults to latest); " +
-       "interfaceName (optional) � short interface name without namespace."
+       "packageId — NuGet package ID; " +
+       "version (optional) — package version (defaults to latest); " +
+       "interfaceName (optional) — short interface name without namespace."
      )]
     public async Task<string> GetInterfaceDefinition(
         string packageId,
@@ -71,66 +232,23 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
             logger.LogInformation("Fetching interface {InterfaceName} from package {PackageId} version {Version}",
                 interfaceName, packageId, version);
 
-            // Create temporary paths with GUID to ensure uniqueness
-            var runId = Guid.NewGuid().ToString("N");
-            var tmpFolder = Path.Combine(Path.GetTempPath(), $"{packageId}-{version}-{runId}");
-            var nupkgFile = Path.Combine(Path.GetTempPath(), $"{packageId}-{version}-{runId}.nupkg");
-            Directory.CreateDirectory(tmpFolder);
+            var (tmpFolder, nupkgFile) = await DownloadAndExtractPackageAsync(packageId, version);
 
             try
             {
-                // 1. Download .nupkg
-                var url = $"https://api.nuget.org/v3-flatcontainer/{packageId.ToLower()}/{version}/{packageId.ToLower()}.{version}.nupkg";
-                using (var stream = await httpClient.GetStreamAsync(url))
-                using (var fs = File.Create(nupkgFile))
-                await stream.CopyToAsync(fs);
-
-                // 2. Extract package
-                ZipFile.ExtractToDirectory(nupkgFile, tmpFolder);
-
-                // 3. Search in each DLL
+                // Search in each DLL
                 foreach (var dll in Directory.EnumerateFiles(tmpFolder, "*.dll", SearchOption.AllDirectories))
                 {
-                    byte[] raw;
-                    try
-                    {
-                        raw = File.ReadAllBytes(dll);
-                    }
-                    catch
-                    {
-                        continue;
-                    }
+                    var assembly = LoadAssembly(dll);
+                    if (assembly == null) continue;
 
-                    Assembly asm;
-                    try
-                    {
-                        asm = Assembly.Load(raw);
-                    }
-                    catch
-                    {
-                        continue;
-                    }
-
-                    var iface = asm.GetTypes()
-                                   .FirstOrDefault(t => t.IsInterface && t.Name == interfaceName);
+                    var iface = assembly.GetTypes()
+                        .FirstOrDefault(t => t.IsInterface && t.Name == interfaceName);
+                    
                     if (iface == null)
                         continue;
 
-                    // Build interface signature
-                    var sb = new StringBuilder()
-                        .AppendLine($"// from {Path.GetFileName(dll)}")
-                        .AppendLine($"public interface {iface.Name}")
-                        .AppendLine("{");
-
-                    foreach (var m in iface.GetMethods())
-                    {
-                        var ps = string.Join(", ",
-                            m.GetParameters().Select(p => $"{p.ParameterType.Name} {p.Name}"));
-                        sb.AppendLine($"    {m.ReturnType.Name} {m.Name}({ps});");
-                    }
-
-                    sb.AppendLine("}");
-                    return sb.ToString();
+                    return FormatInterfaceDefinition(iface, Path.GetFileName(dll));
                 }
 
                 return $"Interface '{interfaceName}' not found in package {packageId}.";
