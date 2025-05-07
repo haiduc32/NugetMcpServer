@@ -29,6 +29,27 @@ public class InterfaceInfo
     public string AssemblyName { get; set; } = string.Empty;
 }
 
+/// <summary>
+/// Response model for interface listing including package version information
+/// </summary>
+public class InterfaceListResult
+{
+    /// <summary>
+    /// NuGet package ID
+    /// </summary>
+    public string PackageId { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Package version
+    /// </summary>
+    public string Version { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// List of interfaces found in the package
+    /// </summary>
+    public List<InterfaceInfo> Interfaces { get; set; } = new List<InterfaceInfo>();
+}
+
 [McpServerToolType]
 public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, HttpClient httpClient)
 {
@@ -115,22 +136,21 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
 
         sb.AppendLine("}");
         return sb.ToString();
-    }
-
-    /// <summary>
+    }    /// <summary>
     /// Lists all public interfaces from a specified NuGet package
     /// </summary>
     /// <param name="packageId">NuGet package ID</param>
     /// <param name="version">Optional package version (defaults to latest)</param>
-    /// <returns>List of interface information</returns>
+    /// <returns>Object containing package information and list of interfaces</returns>
     [McpServerTool,
      Description(
        "Lists all public interfaces available in a specified NuGet package. " +
        "Parameters: " +
        "packageId — NuGet package ID; " +
-       "version (optional) — package version (defaults to latest)"
+       "version (optional) — package version (defaults to latest). " +
+       "Returns package ID, version and list of interfaces."
      )]
-    public async Task<List<InterfaceInfo>> ListInterfaces(
+    public async Task<InterfaceListResult> ListInterfaces(
         string packageId,
         string? version = null)
     {
@@ -147,7 +167,13 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
             logger.LogInformation("Listing interfaces from package {PackageId} version {Version}",
                 packageId, version);
 
-            var result = new List<InterfaceInfo>();
+            var result = new InterfaceListResult
+            {
+                PackageId = packageId,
+                Version = version,
+                Interfaces = new List<InterfaceInfo>()
+            };
+            
             var (tmpFolder, nupkgFile) = await DownloadAndExtractPackageAsync(packageId, version);
 
             try
@@ -165,7 +191,7 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
 
                     foreach (var iface in interfaces)
                     {
-                        result.Add(new InterfaceInfo
+                        result.Interfaces.Add(new InterfaceInfo
                         {
                             Name = iface.Name,
                             FullName = iface.FullName ?? string.Empty,

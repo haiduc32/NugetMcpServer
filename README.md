@@ -54,7 +54,7 @@ The server is configured using the .NET Generic Host with the following componen
 ### InterfaceLookupService
 
 - `GetInterfaceDefinition(packageId, interfaceName, version?)` - Extracts and returns the C# interface definition from a specified NuGet package
-- `ListInterfaces(packageId, version?)` - Lists all public interfaces available in a specified NuGet package
+- `ListInterfaces(packageId, version?)` - Lists all public interfaces available in a specified NuGet package. Returns package ID, package version and the list of interfaces
 
 ## Technical Details
 
