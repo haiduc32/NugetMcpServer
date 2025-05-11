@@ -1,10 +1,7 @@
-﻿using System;
-using System.ComponentModel;
-using System.Net.Http;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using ModelContextProtocol.Server;
+using System.Net.Http;
 
 var builder = Host.CreateApplicationBuilder(args);
 

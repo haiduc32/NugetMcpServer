@@ -12,7 +12,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 
-namespace LocalMcpServer.Services;
+namespace NuGetMcpServer.Services;
 
 /// <summary>
 /// Model for interface information

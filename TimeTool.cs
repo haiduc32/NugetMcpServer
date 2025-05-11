@@ -2,6 +2,8 @@ using ModelContextProtocol.Server;
 using System;
 using System.ComponentModel;
 
+namespace NugetMcpServer;
+
 [McpServerToolType]
 public static class TimeTool
 {

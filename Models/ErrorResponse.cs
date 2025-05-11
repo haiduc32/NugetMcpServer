@@ -1,4 +1,4 @@
-namespace LocalMcpServer.Models;
+namespace NugetMcpServer.Models;
 
 public class ErrorResponse
 {
