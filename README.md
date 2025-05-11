@@ -1,4 +1,4 @@
-# LocalMcpServer
+# NugetMcpServer
 
 A demonstration implementation of a server supporting the Model Context Protocol (MCP).
 
@@ -35,7 +35,8 @@ This demo can be used in conjunction with the [OllamaChat](https://github.com/Di
 ## Project Structure
 
 - `Program.cs` - The main entry point that configures and runs the MCP server
-- `TimeTool.cs` - A sample tool implementation that provides time-related functionality
+- `TimeTool.cs` - A sample tool implementation that provides time-related functionality (namespace `NugetMcpServer`)
+- `Services/InterfaceLookupService.cs` - Service for looking up interface definitions in NuGet packages (namespace `NuGetMcpServer.Services`)
 
 ## Implementation Details
 
@@ -59,6 +60,10 @@ The server is configured using the .NET Generic Host with the following componen
 ## Technical Details
 
 The application uses the ModelContextProtocol library (version 0.1.0-preview.9), which provides infrastructure for creating MCP-compatible servers. The server is configured to use standard input/output for communication with clients.
+
+The project uses the following namespaces:
+- `NugetMcpServer` - Main namespace for the project (used in TimeTool.cs)
+- `NuGetMcpServer.Services` - Namespace for service components (used in InterfaceLookupService.cs)
 
 ## Integration with OllamaChat
 
