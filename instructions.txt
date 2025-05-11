@@ -1,0 +1,4 @@
+
+
+winget install -m ".\manifests\d\DimonSmart\NugetMcpServer\1.0.0.0"
+winget uninstall -m ".\manifests\d\DimonSmart\NugetMcpServer\1.0.0.0"

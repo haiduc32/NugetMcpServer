@@ -6,12 +6,13 @@
         <TargetFramework>net9.0</TargetFramework>
 
         <Title>NuGet Interface Scanner mcp server</Title>
-        <Description>CLI utility for searching interfaces and their methods inside NuGet packages.</Description>
+        <Description>MCP server for searching interfaces and their methods inside NuGet packages.</Description>
         <Authors>DimonSmart</Authors>
         <Company>DimonSmart</Company>
         <PackageTags>nuget;interface;scanner;cli;tool</PackageTags>
 
         <PublishSingleFile>true</PublishSingleFile>
+        <PublishTrimmed>false</PublishTrimmed>
         <SelfContained>true</SelfContained>
         <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     </PropertyGroup>

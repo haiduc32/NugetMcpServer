@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using NuGetMcpServer.Services;
 using System.Net.Http;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -15,7 +16,7 @@ builder.Logging.AddConsole(options =>
 builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
-    .WithToolsFromAssembly();
+    .WithToolsFromAssembly(typeof(InterfaceLookupService).Assembly);
 
 // Register HttpClient for InterfaceLookupService
 builder.Services.AddSingleton<HttpClient>();
