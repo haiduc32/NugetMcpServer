@@ -1,10 +1,16 @@
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
+using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.IO.Compression;
+using System.Linq;
+using System.Net.Http;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace LocalMcpServer.Services;
 
@@ -47,7 +53,7 @@ public class InterfaceListResult
     /// <summary>
     /// List of interfaces found in the package
     /// </summary>
-    public List<InterfaceInfo> Interfaces { get; set; } = new List<InterfaceInfo>();
+    public List<InterfaceInfo> Interfaces { get; set; } = [];
 }
 
 [McpServerToolType]

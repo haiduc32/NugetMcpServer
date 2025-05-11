@@ -1,4 +1,5 @@
 using ModelContextProtocol.Server;
+using System;
 using System.ComponentModel;
 
 [McpServerToolType]
