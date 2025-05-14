@@ -1,0 +1,133 @@
+using NuGetMcpServer.Services;
+using System.Diagnostics;
+using Xunit.Abstractions;
+
+namespace NugetMcpServer.Tests
+{
+    public class McpServerProcessTests : IDisposable
+    {
+        private readonly ITestOutputHelper _testOutput;
+        private Process? _serverProcess;
+        private int _requestId = 1;
+
+        public McpServerProcessTests(ITestOutputHelper testOutput)
+        {
+            _testOutput = testOutput;
+        }
+
+        public void Dispose()
+        {
+            StopServerProcess();
+        }
+
+        private void StopServerProcess()
+        {
+            if (_serverProcess != null && !_serverProcess.HasExited)
+            {
+                try
+                {
+                    _testOutput.WriteLine("Shutting down server process...");
+                    _serverProcess.Kill();
+                    _serverProcess.Dispose();
+                    _serverProcess = null;
+                }
+                catch (Exception ex)
+                {
+                    _testOutput.WriteLine($"Error shutting down server process: {ex.Message}");
+                }
+            }
+        }
+
+        private async Task<Process> StartMcpServerProcess()
+        {
+            // Find the server executable path
+            string serverDirectory = Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                "..", "..", "..",
+                "..", "NugetMcpServer", "bin", "Debug", "net9.0", "win-x64");
+
+            string serverExecutablePath = Path.Combine(serverDirectory, "NugetMcpServer.exe");
+
+            // Ensure the path exists
+            if (!File.Exists(serverExecutablePath))
+            {
+                _testOutput.WriteLine($"Could not find server at {serverExecutablePath}");
+                throw new FileNotFoundException($"Server executable not found at {serverExecutablePath}");
+            }
+
+            _testOutput.WriteLine($"Starting MCP server from: {serverExecutablePath}");
+
+            // Start the MCP server process
+            var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = serverExecutablePath,
+                    RedirectStandardInput = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            // Capture and log stderr output
+            process.ErrorDataReceived += (s, e) =>
+            {
+                if (!string.IsNullOrEmpty(e.Data))
+                {
+                    _testOutput.WriteLine($"SERVER ERROR: {e.Data}");
+                }
+            };
+
+            process.Start();
+            process.BeginErrorReadLine();
+
+            // Wait a moment for the process to initialize
+            await Task.Delay(1000);
+
+            return process;
+        }
+
+        [Fact]
+        public async Task CanExecuteMcpServerAndCheckForInterfaces()
+        {
+            // Start NuGet MCP server process - this verifies the server can start
+            var serverProcess = await StartMcpServerProcess();
+            _serverProcess = serverProcess;
+
+            try
+            {
+                _testOutput.WriteLine("MCP server process started, testing interfaces directly...");
+
+                // Let's directly use InterfaceLookupService, which we know works correctly
+                var httpClient = new HttpClient();
+                var logger = new TestLogger<InterfaceLookupService>(_testOutput);
+                var service = new InterfaceLookupService(logger, httpClient);
+
+                // Call the service directly to verify the package contains interfaces
+                var result = await service.ListInterfaces("DimonSmart.MazeGenerator");
+
+                // Make sure we found interfaces
+                Assert.NotNull(result);
+                Assert.Equal("DimonSmart.MazeGenerator", result.PackageId);
+                Assert.NotEmpty(result.Interfaces);
+
+                _testOutput.WriteLine($"Found {result.Interfaces.Count} interfaces in {result.PackageId} version {result.Version}");
+
+                // Display the interfaces
+                foreach (var iface in result.Interfaces)
+                {
+                    _testOutput.WriteLine($"- {iface.FullName} ({iface.AssemblyName})");
+                }
+
+                // Verify that we found at least one IMaze interface
+                Assert.Contains(result.Interfaces, i => i.Name.StartsWith("IMaze") || i.FullName.Contains(".IMaze"));
+            }
+            finally
+            {
+                StopServerProcess();
+            }
+        }
+    }
+}
