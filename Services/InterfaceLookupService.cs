@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
+using NuGetMcpServer.Extensions;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -23,12 +24,12 @@ public class InterfaceInfo
     /// Interface name (without namespace)
     /// </summary>
     public string Name { get; set; } = string.Empty;
-    
+
     /// <summary>
     /// Full interface name with namespace
     /// </summary>
     public string FullName { get; set; } = string.Empty;
-    
+
     /// <summary>
     /// Assembly name where interface is defined
     /// </summary>
@@ -44,12 +45,12 @@ public class InterfaceListResult
     /// NuGet package ID
     /// </summary>
     public string PackageId { get; set; } = string.Empty;
-    
+
     /// <summary>
     /// Package version
     /// </summary>
     public string Version { get; set; } = string.Empty;
-    
+
     /// <summary>
     /// List of interfaces found in the package
     /// </summary>
@@ -76,11 +77,11 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
 
         return versions.Last();
     }    /// <summary>
-    /// Helper method to download and extract a NuGet package
-    /// </summary>
-    /// <param name="packageId">NuGet package ID</param>
-    /// <param name="version">Package version</param>
-    /// <returns>Tuple containing temp folder path and nupkg file path</returns>
+         /// Helper method to download and extract a NuGet package
+         /// </summary>
+         /// <param name="packageId">NuGet package ID</param>
+         /// <param name="version">Package version</param>
+         /// <returns>Tuple containing temp folder path and nupkg file path</returns>
     private async Task<(string TempFolder, string NupkgFile)> DownloadAndExtractPackageAsync(string packageId, string version)
     {
         // Create temporary paths with GUID to ensure uniqueness
@@ -143,11 +144,11 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
         sb.AppendLine("}");
         return sb.ToString();
     }    /// <summary>
-    /// Lists all public interfaces from a specified NuGet package
-    /// </summary>
-    /// <param name="packageId">NuGet package ID</param>
-    /// <param name="version">Optional package version (defaults to latest)</param>
-    /// <returns>Object containing package information and list of interfaces</returns>
+         /// Lists all public interfaces from a specified NuGet package
+         /// </summary>
+         /// <param name="packageId">NuGet package ID</param>
+         /// <param name="version">Optional package version (defaults to latest)</param>
+         /// <returns>Object containing package information and list of interfaces</returns>
     [McpServerTool,
      Description(
        "Lists all public interfaces available in a specified NuGet package. " +
@@ -165,10 +166,14 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
             if (string.IsNullOrWhiteSpace(packageId))
                 throw new ArgumentNullException(nameof(packageId));
 
-            if (string.IsNullOrEmpty(version))
+            if (version.IsNullOrEmptyOrNullString())
             {
                 version = await GetLatestVersion(packageId);
             }
+
+            // Ensure we have non-null values for packageId and version
+            packageId = packageId ?? string.Empty;
+            version = version ?? string.Empty;
 
             logger.LogInformation("Listing interfaces from package {PackageId} version {Version}",
                 packageId, version);
@@ -179,7 +184,7 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
                 Version = version,
                 Interfaces = new List<InterfaceInfo>()
             };
-            
+
             var (tmpFolder, nupkgFile) = await DownloadAndExtractPackageAsync(packageId, version);
 
             try
@@ -256,10 +261,13 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
             if (string.IsNullOrWhiteSpace(interfaceName))
                 throw new ArgumentNullException(nameof(interfaceName));
 
-            if (string.IsNullOrEmpty(version))
+            if (version.IsNullOrEmptyOrNullString())
             {
                 version = await GetLatestVersion(packageId);
             }
+
+            packageId = packageId ?? string.Empty;
+            version = version ?? string.Empty;
 
             logger.LogInformation("Fetching interface {InterfaceName} from package {PackageId} version {Version}",
                 interfaceName, packageId, version);
@@ -276,7 +284,7 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
 
                     var iface = assembly.GetTypes()
                         .FirstOrDefault(t => t.IsInterface && t.Name == interfaceName);
-                    
+
                     if (iface == null)
                         continue;
 

@@ -15,8 +15,9 @@
         <PublishTrimmed>false</PublishTrimmed>
         <SelfContained>true</SelfContained>
         <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+        <Nullable>enable</Nullable>
 
-        <!-- Disable CET (Control-flow Enforcement Technology) because .NET 9 single-file apps
+		<!-- Disable CET (Control-flow Enforcement Technology) because .NET 9 single-file apps
          crash with a FailFast on Windows 10/11 when Shadow Stacks are enabled.
          Remove this line once the runtime bug (dotnet/runtime#108589) is fixed
          or your minimum supported OS fully supports CET. -->
