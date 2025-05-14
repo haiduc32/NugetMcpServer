@@ -1,9 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.13.35931.197 d17.13
+VisualStudioVersion = 17.13.35931.197
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NugetMcpServer", "NugetMcpServer.csproj", "{F72E8B43-4606-E407-C22E-B263B04C2DA6}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NugetMcpServer", "NugetMcpServer\NugetMcpServer.csproj", "{F72E8B43-4606-E407-C22E-B263B04C2DA6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NugetMcpServer.Tests", "NugetMcpServer.Tests\NugetMcpServer.Tests.csproj", "{30AD02FD-13AA-4C37-A0CB-9E2E633C65CD}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +17,10 @@ Global
 		{F72E8B43-4606-E407-C22E-B263B04C2DA6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F72E8B43-4606-E407-C22E-B263B04C2DA6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F72E8B43-4606-E407-C22E-B263B04C2DA6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{30AD02FD-13AA-4C37-A0CB-9E2E633C65CD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{30AD02FD-13AA-4C37-A0CB-9E2E633C65CD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{30AD02FD-13AA-4C37-A0CB-9E2E633C65CD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{30AD02FD-13AA-4C37-A0CB-9E2E633C65CD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

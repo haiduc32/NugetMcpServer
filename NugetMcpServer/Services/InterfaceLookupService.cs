@@ -15,48 +15,6 @@ using System.Threading.Tasks;
 
 namespace NuGetMcpServer.Services;
 
-/// <summary>
-/// Model for interface information
-/// </summary>
-public class InterfaceInfo
-{
-    /// <summary>
-    /// Interface name (without namespace)
-    /// </summary>
-    public string Name { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Full interface name with namespace
-    /// </summary>
-    public string FullName { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Assembly name where interface is defined
-    /// </summary>
-    public string AssemblyName { get; set; } = string.Empty;
-}
-
-/// <summary>
-/// Response model for interface listing including package version information
-/// </summary>
-public class InterfaceListResult
-{
-    /// <summary>
-    /// NuGet package ID
-    /// </summary>
-    public string PackageId { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Package version
-    /// </summary>
-    public string Version { get; set; } = string.Empty;
-
-    /// <summary>
-    /// List of interfaces found in the package
-    /// </summary>
-    public List<InterfaceInfo> Interfaces { get; set; } = [];
-}
-
 [McpServerToolType]
 public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, HttpClient httpClient)
 {
@@ -76,47 +34,39 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
             .ToList();
 
         return versions.Last();
-    }    /// <summary>
-         /// Helper method to download and extract a NuGet package
-         /// </summary>
-         /// <param name="packageId">NuGet package ID</param>
-         /// <param name="version">Package version</param>
-         /// <returns>Tuple containing temp folder path and nupkg file path</returns>
-    private async Task<(string TempFolder, string NupkgFile)> DownloadAndExtractPackageAsync(string packageId, string version)
+    }
+
+
+    /// <summary>
+    /// Helper method to download a NuGet package and return it as a memory stream
+    /// </summary>
+    /// <param name="packageId">NuGet package ID</param>
+    /// <param name="version">Package version</param>
+    /// <returns>MemoryStream containing the package data</returns>
+    private async Task<MemoryStream> DownloadPackageAsync(string packageId, string version)
     {
-        // Create temporary paths with GUID to ensure uniqueness
-        var runId = Guid.NewGuid().ToString("N");
-        var tmpFolder = Path.Combine(Path.GetTempPath(), $"{packageId}-{version}-{runId}");
-        var nupkgFile = Path.Combine(Path.GetTempPath(), $"{packageId}-{version}-{runId}.nupkg");
-        Directory.CreateDirectory(tmpFolder);
-
-        // 1. Download .nupkg
+        // Download .nupkg
         var url = $"https://api.nuget.org/v3-flatcontainer/{packageId.ToLower()}/{version}/{packageId.ToLower()}.{version}.nupkg";
-        using (var stream = await httpClient.GetStreamAsync(url))
-        using (var fs = File.Create(nupkgFile))
-            await stream.CopyToAsync(fs);
-
-        // 2. Extract package
-        ZipFile.ExtractToDirectory(nupkgFile, tmpFolder);
-
-        return (tmpFolder, nupkgFile);
+        logger.LogInformation("Downloading package from {Url}", url);
+        
+        var response = await httpClient.GetByteArrayAsync(url);
+        return new MemoryStream(response);
     }
 
     /// <summary>
-    /// Helper method to load and scan assemblies for interfaces
+    /// Helper method to load and scan assemblies for interfaces directly from memory
     /// </summary>
-    /// <param name="dllPath">Path to DLL file</param>
+    /// <param name="assemblyData">Assembly bytes</param>
     /// <returns>Assembly if successfully loaded, null otherwise</returns>
-    private Assembly? LoadAssembly(string dllPath)
+    private Assembly? LoadAssemblyFromMemory(byte[] assemblyData)
     {
         try
         {
-            var raw = File.ReadAllBytes(dllPath);
-            return Assembly.Load(raw);
+            return Assembly.Load(assemblyData);
         }
         catch (Exception ex)
         {
-            logger.LogDebug(ex, "Failed to load assembly: {DllPath}", dllPath);
+            logger.LogDebug(ex, "Failed to load assembly from memory");
             return null;
         }
     }
@@ -185,17 +135,28 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
                 Interfaces = new List<InterfaceInfo>()
             };
 
-            var (tmpFolder, nupkgFile) = await DownloadAndExtractPackageAsync(packageId, version);
-
-            try
+            using var packageStream = await DownloadPackageAsync(packageId, version);
+            using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read);
+            
+            // Scan each DLL in the package
+            foreach (var entry in archive.Entries)
             {
-                // Scan each DLL in the package
-                foreach (var dll in Directory.EnumerateFiles(tmpFolder, "*.dll", SearchOption.AllDirectories))
+                if (!entry.FullName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                
+                try
                 {
-                    var assembly = LoadAssembly(dll);
+                    // Read the DLL into memory
+                    using var entryStream = entry.Open();
+                    using var ms = new MemoryStream();
+                    await entryStream.CopyToAsync(ms);
+                    
+                    var assemblyData = ms.ToArray();
+                    var assembly = LoadAssemblyFromMemory(assemblyData);
+                    
                     if (assembly == null) continue;
 
-                    var assemblyName = Path.GetFileName(dll);
+                    var assemblyName = Path.GetFileName(entry.FullName);
                     var interfaces = assembly.GetTypes()
                         .Where(t => t.IsInterface && t.IsPublic)
                         .ToList();
@@ -210,15 +171,13 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
                         });
                     }
                 }
+                catch (Exception ex)
+                {
+                    logger.LogDebug(ex, "Error processing archive entry {EntryName}", entry.FullName);
+                }
+            }
 
-                return result;
-            }
-            finally
-            {
-                // Cleanup: delete folder and .nupkg
-                try { Directory.Delete(tmpFolder, true); } catch { /* ignore */ }
-                try { File.Delete(nupkgFile); } catch { /* ignore */ }
-            }
+            return result;
         }
         catch (Exception ex)
         {
@@ -272,14 +231,25 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
             logger.LogInformation("Fetching interface {InterfaceName} from package {PackageId} version {Version}",
                 interfaceName, packageId, version);
 
-            var (tmpFolder, nupkgFile) = await DownloadAndExtractPackageAsync(packageId, version);
-
-            try
+            using var packageStream = await DownloadPackageAsync(packageId, version);
+            using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read);
+            
+            // Search in each DLL in the archive
+            foreach (var entry in archive.Entries)
             {
-                // Search in each DLL
-                foreach (var dll in Directory.EnumerateFiles(tmpFolder, "*.dll", SearchOption.AllDirectories))
+                if (!entry.FullName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                
+                try
                 {
-                    var assembly = LoadAssembly(dll);
+                    // Read the DLL into memory
+                    using var entryStream = entry.Open();
+                    using var ms = new MemoryStream();
+                    await entryStream.CopyToAsync(ms);
+                    
+                    var assemblyData = ms.ToArray();
+                    var assembly = LoadAssemblyFromMemory(assemblyData);
+                    
                     if (assembly == null) continue;
 
                     var iface = assembly.GetTypes()
@@ -288,17 +258,15 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
                     if (iface == null)
                         continue;
 
-                    return FormatInterfaceDefinition(iface, Path.GetFileName(dll));
+                    return FormatInterfaceDefinition(iface, Path.GetFileName(entry.FullName));
                 }
+                catch (Exception ex)
+                {
+                    logger.LogDebug(ex, "Error processing archive entry {EntryName}", entry.FullName);
+                }
+            }
 
-                return $"Interface '{interfaceName}' not found in package {packageId}.";
-            }
-            finally
-            {
-                // Cleanup: delete folder and .nupkg
-                try { Directory.Delete(tmpFolder, true); } catch { /* ignore */ }
-                try { File.Delete(nupkgFile); } catch { /* ignore */ }
-            }
+            return $"Interface '{interfaceName}' not found in package {packageId}.";
         }
         catch (Exception ex)
         {
