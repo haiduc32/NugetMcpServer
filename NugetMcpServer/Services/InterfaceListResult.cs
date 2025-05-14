@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace NuGetMcpServer.Services;
@@ -12,7 +13,6 @@ public class InterfaceListResult
     /// NuGet package ID
     /// </summary>
     public string PackageId { get; set; } = string.Empty;
-
     /// <summary>
     /// Package version
     /// </summary>
@@ -21,7 +21,9 @@ public class InterfaceListResult
     /// <summary>
     /// List of interfaces found in the package
     /// </summary>
-    public List<InterfaceInfo> Interfaces { get; set; } = [];    /// <summary>
+    public List<InterfaceInfo> Interfaces { get; set; } = [];
+
+    /// <summary>
     /// Returns a formatted string representation of the interface list
     /// </summary>
     /// <returns>Formatted list of interfaces</returns>
@@ -30,13 +32,27 @@ public class InterfaceListResult
         var sb = new StringBuilder();
         sb.AppendLine($"/* INTERFACES FROM {PackageId} v{Version} */");
         sb.AppendLine();
-        
-        foreach (var iface in Interfaces)
+
+        // Group interfaces by assembly name
+        var groupedInterfaces = Interfaces
+            .GroupBy(i => i.AssemblyName)
+            .OrderBy(g => g.Key);
+
+        foreach (var group in groupedInterfaces)
         {
-            var formattedName = iface.GetFormattedFullName();
-            sb.AppendLine($"- {formattedName} ({iface.AssemblyName})");
+            // Add assembly name as a sub-header
+            sb.AppendLine($"## {group.Key}");
+
+            // List interfaces from this assembly without repeating the DLL name
+            foreach (var iface in group.OrderBy(i => i.FullName))
+            {
+                var formattedName = iface.GetFormattedFullName();
+                sb.AppendLine($"- {formattedName}");
+            }
+
+            sb.AppendLine();
         }
-        
+
         return sb.ToString();
     }
 }
