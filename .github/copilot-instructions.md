@@ -1,9 +1,10 @@
 ﻿## Project Coding Standards
 
 ### Comments
-- Avoid stating the obvious.
-- Only add comments when they add real value.
-- Write all comments in English.
+- Write comments only when they add real value: explain **why** or clarify **non-trivial** behavior.
+- Do **not** comment on what is already obvious from the code (e.g., simple assignments or straightforward condition checks).
+- Avoid comments that describe **what** the code does; focus on **why** and on any non-standard implementation details.
+- All comments must be written in English.  
 
 ### Control Flow
 - Minimize use of `if…else`; prefer guard clauses and early `return`.

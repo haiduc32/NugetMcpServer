@@ -12,6 +12,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using static NuGetMcpServer.Extensions.ExceptionHandlingExtensions;
 
 namespace NuGetMcpServer.Services;
 
@@ -168,46 +169,7 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
     /// <summary>
     /// Format a type name to be more C#-like 
     /// </summary>
-    private string FormatTypeName(Type type)
-    {
-        // Handle void return type
-        if (type == typeof(void))
-            return "void";
-
-        // Handle common C# primitive types
-        var typeMap = new Dictionary<Type, string>
-        {
-            { typeof(int), "int" },
-            { typeof(string), "string" },
-            { typeof(bool), "bool" },
-            { typeof(double), "double" },
-            { typeof(float), "float" },
-            { typeof(long), "long" },
-            { typeof(short), "short" },
-            { typeof(byte), "byte" },
-            { typeof(char), "char" },
-            { typeof(object), "object" },
-            { typeof(decimal), "decimal" }
-        };
-
-        if (typeMap.TryGetValue(type, out var mappedName))
-            return mappedName;
-
-        // Handle generic types
-        if (type.IsGenericType)
-        {
-            var genericTypeName = type.Name;
-            var tickIndex = genericTypeName.IndexOf('`');
-            if (tickIndex > 0)
-                genericTypeName = genericTypeName.Substring(0, tickIndex);
-
-            var genericArgs = type.GetGenericArguments();
-            return $"{genericTypeName}<{string.Join(", ", genericArgs.Select(FormatTypeName))}>";
-        }
-
-        // Return the regular type name
-        return type.Name;
-    }
+    private string FormatTypeName(Type type) => type.FormatCSharpTypeName();
 
     /// <summary>
     /// Get all generic constraints for a generic interface
@@ -286,82 +248,91 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
        "version (optional) — package version (defaults to latest). " +
        "Returns package ID, version and list of interfaces."
      )]
-    public async Task<InterfaceListResult> ListInterfaces(
+    public Task<InterfaceListResult> ListInterfaces(
         string packageId,
         string? version = null)
     {
+        return ExecuteWithLoggingAsync(
+            () => ListInterfacesCore(packageId, version),
+            logger,
+            "Error listing interfaces");
+    }
+
+    /// <summary>
+    /// Core logic for listing interfaces without try/catch
+    /// </summary>
+    private async Task<InterfaceListResult> ListInterfacesCore(string packageId, string? version)
+    {
+        if (string.IsNullOrWhiteSpace(packageId))
+            throw new ArgumentNullException(nameof(packageId));
+
+        if (version.IsNullOrEmptyOrNullString())
+        {
+            version = await GetLatestVersion(packageId);
+        }
+
+        // Ensure we have non-null values for packageId and version
+        packageId = packageId ?? string.Empty;
+        version = version ?? string.Empty;
+
+        logger.LogInformation("Listing interfaces from package {PackageId} version {Version}",
+            packageId, version);
+
+        var result = new InterfaceListResult
+        {
+            PackageId = packageId,
+            Version = version,
+            Interfaces = new List<InterfaceInfo>()
+        };
+
+        using var packageStream = await DownloadPackageAsync(packageId, version);
+        using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read);
+
+        // Scan each DLL in the package
+        foreach (var entry in archive.Entries)
+        {
+            if (!entry.FullName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            ProcessArchiveEntry(entry, result);
+        }
+
+        return result;
+    }    /// <summary>
+    /// Process a single archive entry to extract interfaces
+    /// </summary>
+    private void ProcessArchiveEntry(ZipArchiveEntry entry, InterfaceListResult result)
+    {
         try
         {
-            if (string.IsNullOrWhiteSpace(packageId))
-                throw new ArgumentNullException(nameof(packageId));
+            // Read the DLL into memory
+            using var entryStream = entry.Open();
+            using var ms = new MemoryStream();
+            entryStream.CopyTo(ms);
 
-            if (version.IsNullOrEmptyOrNullString())
+            var assemblyData = ms.ToArray();
+            var assembly = LoadAssemblyFromMemory(assemblyData);
+
+            if (assembly == null) return;
+
+            var assemblyName = Path.GetFileName(entry.FullName);
+            var interfaces = assembly.GetTypes()
+                .Where(t => t.IsInterface && t.IsPublic)
+                .ToList();
+
+            foreach (var iface in interfaces)
             {
-                version = await GetLatestVersion(packageId);
-            }
-
-            // Ensure we have non-null values for packageId and version
-            packageId = packageId ?? string.Empty;
-            version = version ?? string.Empty;
-
-            logger.LogInformation("Listing interfaces from package {PackageId} version {Version}",
-                packageId, version);
-
-            var result = new InterfaceListResult
-            {
-                PackageId = packageId,
-                Version = version,
-                Interfaces = new List<InterfaceInfo>()
-            };
-
-            using var packageStream = await DownloadPackageAsync(packageId, version);
-            using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read);
-
-            // Scan each DLL in the package
-            foreach (var entry in archive.Entries)
-            {
-                if (!entry.FullName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                try
+                result.Interfaces.Add(new InterfaceInfo
                 {
-                    // Read the DLL into memory
-                    using var entryStream = entry.Open();
-                    using var ms = new MemoryStream();
-                    await entryStream.CopyToAsync(ms);
-
-                    var assemblyData = ms.ToArray();
-                    var assembly = LoadAssemblyFromMemory(assemblyData);
-
-                    if (assembly == null) continue;
-
-                    var assemblyName = Path.GetFileName(entry.FullName);
-                    var interfaces = assembly.GetTypes()
-                        .Where(t => t.IsInterface && t.IsPublic)
-                        .ToList();
-
-                    foreach (var iface in interfaces)
-                    {
-                        result.Interfaces.Add(new InterfaceInfo
-                        {
-                            Name = iface.Name,
-                            FullName = iface.FullName ?? string.Empty,
-                            AssemblyName = assemblyName
-                        });
-                    }
-                }
-                catch (Exception ex)
-                {
-                    logger.LogDebug(ex, "Error processing archive entry {EntryName}", entry.FullName);
-                }
+                    Name = iface.Name,
+                    FullName = iface.FullName ?? string.Empty,
+                    AssemblyName = assemblyName
+                });
             }
-
-            return result;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error listing interfaces");
-            throw;
+            logger.LogDebug(ex, "Error processing archive entry {EntryName}", entry.FullName);
         }
     }
 
@@ -386,71 +357,88 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
        "version (optional) — package version (defaults to latest); " +
        "interfaceName (optional) — short interface name without namespace."
      )]
-    public async Task<string> GetInterfaceDefinition(
+    public Task<string> GetInterfaceDefinition(
         string packageId,
         string interfaceName,
         string? version = null)
     {
+        return ExecuteWithLoggingAsync(
+            () => GetInterfaceDefinitionCore(packageId, interfaceName, version),
+            logger,
+            "Error fetching interface definition");
+    }
+
+    /// <summary>
+    /// Core logic for getting interface definition without try/catch
+    /// </summary>
+    private async Task<string> GetInterfaceDefinitionCore(
+        string packageId,
+        string interfaceName,
+        string? version)
+    {
+        if (string.IsNullOrWhiteSpace(packageId))
+            throw new ArgumentNullException(nameof(packageId));
+
+        if (string.IsNullOrWhiteSpace(interfaceName))
+            throw new ArgumentNullException(nameof(interfaceName));
+
+        if (version.IsNullOrEmptyOrNullString())
+        {
+            version = await GetLatestVersion(packageId);
+        }
+
+        packageId = packageId ?? string.Empty;
+        version = version ?? string.Empty;
+
+        logger.LogInformation("Fetching interface {InterfaceName} from package {PackageId} version {Version}",
+            interfaceName, packageId, version);
+
+        using var packageStream = await DownloadPackageAsync(packageId, version);
+        using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read);
+
+        // Search in each DLL in the archive
+        foreach (var entry in archive.Entries)
+        {
+            if (!entry.FullName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var definition = await TryGetInterfaceFromEntry(entry, interfaceName);
+            if (definition != null)
+                return definition;
+        }
+
+        return $"Interface '{interfaceName}' not found in package {packageId}.";
+    }
+
+    /// <summary>
+    /// Try to get interface definition from a specific archive entry
+    /// </summary>
+    private async Task<string?> TryGetInterfaceFromEntry(ZipArchiveEntry entry, string interfaceName)
+    {
         try
         {
-            if (string.IsNullOrWhiteSpace(packageId))
-                throw new ArgumentNullException(nameof(packageId));
+            // Read the DLL into memory
+            using var entryStream = entry.Open();
+            using var ms = new MemoryStream();
+            await entryStream.CopyToAsync(ms);
 
-            if (string.IsNullOrWhiteSpace(interfaceName))
-                throw new ArgumentNullException(nameof(interfaceName));
+            var assemblyData = ms.ToArray();
+            var assembly = LoadAssemblyFromMemory(assemblyData);
 
-            if (version.IsNullOrEmptyOrNullString())
-            {
-                version = await GetLatestVersion(packageId);
-            }
+            if (assembly == null) return null;
 
-            packageId = packageId ?? string.Empty;
-            version = version ?? string.Empty;
+            var iface = assembly.GetTypes()
+                .FirstOrDefault(t => t.IsInterface && t.Name == interfaceName);
 
-            logger.LogInformation("Fetching interface {InterfaceName} from package {PackageId} version {Version}",
-                interfaceName, packageId, version);
+            if (iface == null)
+                return null;
 
-            using var packageStream = await DownloadPackageAsync(packageId, version);
-            using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read);
-
-            // Search in each DLL in the archive
-            foreach (var entry in archive.Entries)
-            {
-                if (!entry.FullName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                try
-                {
-                    // Read the DLL into memory
-                    using var entryStream = entry.Open();
-                    using var ms = new MemoryStream();
-                    await entryStream.CopyToAsync(ms);
-
-                    var assemblyData = ms.ToArray();
-                    var assembly = LoadAssemblyFromMemory(assemblyData);
-
-                    if (assembly == null) continue;
-
-                    var iface = assembly.GetTypes()
-                        .FirstOrDefault(t => t.IsInterface && t.Name == interfaceName);
-
-                    if (iface == null)
-                        continue;
-
-                    return FormatInterfaceDefinition(iface, Path.GetFileName(entry.FullName));
-                }
-                catch (Exception ex)
-                {
-                    logger.LogDebug(ex, "Error processing archive entry {EntryName}", entry.FullName);
-                }
-            }
-
-            return $"Interface '{interfaceName}' not found in package {packageId}.";
+            return FormatInterfaceDefinition(iface, Path.GetFileName(entry.FullName));
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error fetching interface definition");
-            throw;
+            logger.LogDebug(ex, "Error processing archive entry {EntryName}", entry.FullName);
+            return null;
         }
     }
 }
