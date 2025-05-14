@@ -4,16 +4,9 @@ using Xunit.Abstractions;
 
 namespace NugetMcpServer.Tests
 {
-    public class McpServerProcessTests : IDisposable
+    public class McpServerProcessTests(ITestOutputHelper testOutput) : IDisposable
     {
-        private readonly ITestOutputHelper _testOutput;
         private Process? _serverProcess;
-        private int _requestId = 1;
-
-        public McpServerProcessTests(ITestOutputHelper testOutput)
-        {
-            _testOutput = testOutput;
-        }
 
         public void Dispose()
         {
@@ -26,14 +19,14 @@ namespace NugetMcpServer.Tests
             {
                 try
                 {
-                    _testOutput.WriteLine("Shutting down server process...");
+                    testOutput.WriteLine("Shutting down server process...");
                     _serverProcess.Kill();
                     _serverProcess.Dispose();
                     _serverProcess = null;
                 }
                 catch (Exception ex)
                 {
-                    _testOutput.WriteLine($"Error shutting down server process: {ex.Message}");
+                    testOutput.WriteLine($"Error shutting down server process: {ex.Message}");
                 }
             }
         }
@@ -51,11 +44,11 @@ namespace NugetMcpServer.Tests
             // Ensure the path exists
             if (!File.Exists(serverExecutablePath))
             {
-                _testOutput.WriteLine($"Could not find server at {serverExecutablePath}");
+                testOutput.WriteLine($"Could not find server at {serverExecutablePath}");
                 throw new FileNotFoundException($"Server executable not found at {serverExecutablePath}");
             }
 
-            _testOutput.WriteLine($"Starting MCP server from: {serverExecutablePath}");
+            testOutput.WriteLine($"Starting MCP server from: {serverExecutablePath}");
 
             // Start the MCP server process
             var process = new Process
@@ -76,7 +69,7 @@ namespace NugetMcpServer.Tests
             {
                 if (!string.IsNullOrEmpty(e.Data))
                 {
-                    _testOutput.WriteLine($"SERVER ERROR: {e.Data}");
+                    testOutput.WriteLine($"SERVER ERROR: {e.Data}");
                 }
             };
 
@@ -98,11 +91,11 @@ namespace NugetMcpServer.Tests
 
             try
             {
-                _testOutput.WriteLine("MCP server process started, testing interfaces directly...");
+                testOutput.WriteLine("MCP server process started, testing interfaces directly...");
 
                 // Let's directly use InterfaceLookupService, which we know works correctly
                 var httpClient = new HttpClient();
-                var logger = new TestLogger<InterfaceLookupService>(_testOutput);
+                var logger = new TestLogger<InterfaceLookupService>(testOutput);
                 var service = new InterfaceLookupService(logger, httpClient);
 
                 // Call the service directly to verify the package contains interfaces
@@ -113,12 +106,12 @@ namespace NugetMcpServer.Tests
                 Assert.Equal("DimonSmart.MazeGenerator", result.PackageId);
                 Assert.NotEmpty(result.Interfaces);
 
-                _testOutput.WriteLine($"Found {result.Interfaces.Count} interfaces in {result.PackageId} version {result.Version}");
+                testOutput.WriteLine($"Found {result.Interfaces.Count} interfaces in {result.PackageId} version {result.Version}");
 
                 // Display the interfaces
                 foreach (var iface in result.Interfaces)
                 {
-                    _testOutput.WriteLine($"- {iface.FullName} ({iface.AssemblyName})");
+                    testOutput.WriteLine($"- {iface.FullName} ({iface.AssemblyName})");
                 }
 
                 // Verify that we found at least one IMaze interface
