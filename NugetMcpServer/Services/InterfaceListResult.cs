@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text;
 
 namespace NuGetMcpServer.Services;
 
@@ -20,5 +21,22 @@ public class InterfaceListResult
     /// <summary>
     /// List of interfaces found in the package
     /// </summary>
-    public List<InterfaceInfo> Interfaces { get; set; } = [];
+    public List<InterfaceInfo> Interfaces { get; set; } = [];    /// <summary>
+    /// Returns a formatted string representation of the interface list
+    /// </summary>
+    /// <returns>Formatted list of interfaces</returns>
+    public string ToFormattedString()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"/* INTERFACES FROM {PackageId} v{Version} */");
+        sb.AppendLine();
+        
+        foreach (var iface in Interfaces)
+        {
+            var formattedName = iface.GetFormattedFullName();
+            sb.AppendLine($"- {formattedName} ({iface.AssemblyName})");
+        }
+        
+        return sb.ToString();
+    }
 }

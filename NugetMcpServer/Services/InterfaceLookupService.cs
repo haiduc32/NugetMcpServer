@@ -48,7 +48,7 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
         // Download .nupkg
         var url = $"https://api.nuget.org/v3-flatcontainer/{packageId.ToLower()}/{version}/{packageId.ToLower()}.{version}.nupkg";
         logger.LogInformation("Downloading package from {Url}", url);
-        
+
         var response = await httpClient.GetByteArrayAsync(url);
         return new MemoryStream(response);
     }
@@ -69,8 +69,7 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
             logger.LogDebug(ex, "Failed to load assembly from memory");
             return null;
         }
-    }
-
+    }    
     /// <summary>
     /// Formats interface definition as a string
     /// </summary>
@@ -80,25 +79,205 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
     private string FormatInterfaceDefinition(Type interfaceType, string assemblyName)
     {
         var sb = new StringBuilder()
-            .AppendLine($"// from {assemblyName}")
-            .AppendLine($"public interface {interfaceType.Name}")
-            .AppendLine("{");
+            .AppendLine($"/* C# INTERFACE FROM {assemblyName} */");
 
-        foreach (var m in interfaceType.GetMethods())
+        // Format the interface declaration with generics
+        sb.Append($"public interface {FormatTypeName(interfaceType)}");
+
+        // Add generic constraints if any
+        if (interfaceType.IsGenericType)
         {
-            var ps = string.Join(", ",
-                m.GetParameters().Select(p => $"{p.ParameterType.Name} {p.Name}"));
-            sb.AppendLine($"    {m.ReturnType.Name} {m.Name}({ps});");
+            var constraints = GetGenericConstraints(interfaceType);
+            if (!string.IsNullOrEmpty(constraints))
+                sb.Append(constraints);
+        }
+
+        sb.AppendLine().AppendLine("{");
+
+        // Track processed property names to avoid duplicates when looking at get/set methods
+        var processedProperties = new HashSet<string>();
+        var properties = GetInterfaceProperties(interfaceType);
+
+        // Add properties
+        foreach (var prop in properties)
+        {
+            processedProperties.Add(prop.Name);
+
+            sb.Append($"    {FormatTypeName(prop.PropertyType)} {prop.Name} {{ ");
+
+            if (prop.GetGetMethod() != null)
+                sb.Append("get; ");
+
+            if (prop.GetSetMethod() != null)
+                sb.Append("set; ");
+
+            sb.AppendLine("}");
+        }
+
+        // Add indexers (special properties)
+        var indexers = GetInterfaceIndexers(interfaceType);
+        foreach (var indexer in indexers)
+        {
+            processedProperties.Add(indexer.Name);
+
+            var parameters = indexer.GetIndexParameters();
+            var paramList = string.Join(", ", parameters.Select(p => $"{FormatTypeName(p.ParameterType)} {p.Name}"));
+
+            sb.Append($"    {FormatTypeName(indexer.PropertyType)} this[{paramList}] {{ ");
+
+            if (indexer.GetGetMethod() != null)
+                sb.Append("get; ");
+
+            if (indexer.GetSetMethod() != null)
+                sb.Append("set; ");
+
+            sb.AppendLine("}");
+        }
+
+        // Add methods (excluding property accessors)
+        foreach (var method in interfaceType.GetMethods())
+        {
+            // Skip property accessor methods that we've already processed
+            if (IsPropertyAccessor(method, processedProperties))
+                continue;
+
+            var parameters = string.Join(", ",
+                method.GetParameters().Select(p => $"{FormatTypeName(p.ParameterType)} {p.Name}"));
+
+            sb.AppendLine($"    {FormatTypeName(method.ReturnType)} {method.Name}({parameters});");
         }
 
         sb.AppendLine("}");
         return sb.ToString();
-    }    /// <summary>
-         /// Lists all public interfaces from a specified NuGet package
-         /// </summary>
-         /// <param name="packageId">NuGet package ID</param>
-         /// <param name="version">Optional package version (defaults to latest)</param>
-         /// <returns>Object containing package information and list of interfaces</returns>
+    }
+
+    /// <summary>
+    /// Check if a method is a property accessor (get/set) for a processed property
+    /// </summary>
+    private bool IsPropertyAccessor(MethodInfo method, HashSet<string> processedProperties)
+    {
+        // Property accessor methods start with get_ or set_ followed by property name
+        if (method.Name.StartsWith("get_") || method.Name.StartsWith("set_"))
+        {
+            var propertyName = method.Name.Substring(4); // Skip get_ or set_
+            return processedProperties.Contains(propertyName);
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Format a type name to be more C#-like 
+    /// </summary>
+    private string FormatTypeName(Type type)
+    {
+        // Handle void return type
+        if (type == typeof(void))
+            return "void";
+
+        // Handle common C# primitive types
+        var typeMap = new Dictionary<Type, string>
+        {
+            { typeof(int), "int" },
+            { typeof(string), "string" },
+            { typeof(bool), "bool" },
+            { typeof(double), "double" },
+            { typeof(float), "float" },
+            { typeof(long), "long" },
+            { typeof(short), "short" },
+            { typeof(byte), "byte" },
+            { typeof(char), "char" },
+            { typeof(object), "object" },
+            { typeof(decimal), "decimal" }
+        };
+
+        if (typeMap.TryGetValue(type, out var mappedName))
+            return mappedName;
+
+        // Handle generic types
+        if (type.IsGenericType)
+        {
+            var genericTypeName = type.Name;
+            var tickIndex = genericTypeName.IndexOf('`');
+            if (tickIndex > 0)
+                genericTypeName = genericTypeName.Substring(0, tickIndex);
+
+            var genericArgs = type.GetGenericArguments();
+            return $"{genericTypeName}<{string.Join(", ", genericArgs.Select(FormatTypeName))}>";
+        }
+
+        // Return the regular type name
+        return type.Name;
+    }
+
+    /// <summary>
+    /// Get all generic constraints for a generic interface
+    /// </summary>
+    private string GetGenericConstraints(Type interfaceType)
+    {
+        if (!interfaceType.IsGenericType)
+            return string.Empty;
+
+        var constraints = new StringBuilder();
+        var genericArgs = interfaceType.GetGenericArguments();
+
+        foreach (var arg in genericArgs)
+        {
+            var argConstraints = new List<string>();
+
+            // Reference type constraint
+            if (arg.GenericParameterAttributes.HasFlag(GenericParameterAttributes.ReferenceTypeConstraint))
+                argConstraints.Add("class");
+
+            // Value type constraint
+            if (arg.GenericParameterAttributes.HasFlag(GenericParameterAttributes.NotNullableValueTypeConstraint))
+                argConstraints.Add("struct");
+
+            // Constructor constraint
+            if (arg.GenericParameterAttributes.HasFlag(GenericParameterAttributes.DefaultConstructorConstraint) &&
+                !arg.GenericParameterAttributes.HasFlag(GenericParameterAttributes.NotNullableValueTypeConstraint))
+                argConstraints.Add("new()");
+
+            // Interface constraints
+            foreach (var constraint in arg.GetGenericParameterConstraints())
+            {
+                if (constraint != typeof(ValueType)) // Skip ValueType for struct constraint
+                    argConstraints.Add(FormatTypeName(constraint));
+            }
+
+            if (argConstraints.Count > 0)
+                constraints.AppendLine($" where {arg.Name} : {string.Join(", ", argConstraints)}");
+        }
+
+        return constraints.ToString();
+    }
+
+    /// <summary>
+    /// Get all properties of an interface including those from base interfaces
+    /// </summary>
+    private IEnumerable<PropertyInfo> GetInterfaceProperties(Type interfaceType)
+    {
+        var properties = interfaceType.GetProperties();
+
+        // Skip indexers (they'll be handled separately)
+        return properties.Where(p => p.GetIndexParameters().Length == 0);
+    }
+
+    /// <summary>
+    /// Get all indexers of an interface including those from base interfaces
+    /// </summary>
+    private IEnumerable<PropertyInfo> GetInterfaceIndexers(Type interfaceType)
+    {
+        var properties = interfaceType.GetProperties();
+
+        // Only return indexers (properties with parameters)
+        return properties.Where(p => p.GetIndexParameters().Length > 0);
+    }
+    /// <summary>
+    /// Lists all public interfaces from a specified NuGet package
+    /// </summary>
+    /// <param name="packageId">NuGet package ID</param>
+    /// <param name="version">Optional package version (defaults to latest)</param>
+    /// <returns>Object containing package information and list of interfaces</returns>
     [McpServerTool,
      Description(
        "Lists all public interfaces available in a specified NuGet package. " +
@@ -137,23 +316,23 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
 
             using var packageStream = await DownloadPackageAsync(packageId, version);
             using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read);
-            
+
             // Scan each DLL in the package
             foreach (var entry in archive.Entries)
             {
                 if (!entry.FullName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                     continue;
-                
+
                 try
                 {
                     // Read the DLL into memory
                     using var entryStream = entry.Open();
                     using var ms = new MemoryStream();
                     await entryStream.CopyToAsync(ms);
-                    
+
                     var assemblyData = ms.ToArray();
                     var assembly = LoadAssemblyFromMemory(assemblyData);
-                    
+
                     if (assembly == null) continue;
 
                     var assemblyName = Path.GetFileName(entry.FullName);
@@ -233,23 +412,23 @@ public class InterfaceLookupService(ILogger<InterfaceLookupService> logger, Http
 
             using var packageStream = await DownloadPackageAsync(packageId, version);
             using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read);
-            
+
             // Search in each DLL in the archive
             foreach (var entry in archive.Entries)
             {
                 if (!entry.FullName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                     continue;
-                
+
                 try
                 {
                     // Read the DLL into memory
                     using var entryStream = entry.Open();
                     using var ms = new MemoryStream();
                     await entryStream.CopyToAsync(ms);
-                    
+
                     var assemblyData = ms.ToArray();
                     var assembly = LoadAssemblyFromMemory(assemblyData);
-                    
+
                     if (assembly == null) continue;
 
                     var iface = assembly.GetTypes()
