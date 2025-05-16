@@ -1,7 +1,7 @@
 
 
 
-dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true -p:SelfContained=true -p:PublishTrimmed=false -o .\publish
+dotnet publish NugetMcpServer/NugetMcpServer.csproj -c Release -r win-x64 -p:PublishSingleFile=true -p:SelfContained=true -p:PublishTrimmed=false -o ./publish
 
 mkdir Winget 
 powershell.exe Compress-Archive -Path .\publish\NugetMcpServer.exe -DestinationPath .\Winget\nuget-mcp-server-win-x64.zip
