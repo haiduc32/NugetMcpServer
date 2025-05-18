@@ -39,7 +39,8 @@ public class GetInterfaceDefinitionTool : McpToolBase<GetInterfaceDefinitionTool
     /// </param>
     /// <param name="version">
     ///   (Optional) Version of the package. If not specified, the latest version will be used.
-    /// </param>    [McpServerTool]
+    /// </param>    
+    [McpServerTool]
     [Description(
        "Extracts and returns the C# interface definition from a specified NuGet package. " +
        "Parameters: " +
