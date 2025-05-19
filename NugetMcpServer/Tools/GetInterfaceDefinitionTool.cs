@@ -65,10 +65,14 @@ public class GetInterfaceDefinitionTool : McpToolBase<GetInterfaceDefinitionTool
         string? version)
     {
         if (string.IsNullOrWhiteSpace(packageId))
+        {
             throw new ArgumentNullException(nameof(packageId));
+        }
 
         if (string.IsNullOrWhiteSpace(interfaceName))
+        {
             throw new ArgumentNullException(nameof(interfaceName));
+        }
 
         if (version.IsNullOrEmptyOrNullString())
         {
@@ -88,40 +92,49 @@ public class GetInterfaceDefinitionTool : McpToolBase<GetInterfaceDefinitionTool
         foreach (var entry in archive.Entries)
         {
             if (!entry.FullName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            {
                 continue;
+            }
 
             var definition = await TryGetInterfaceFromEntry(entry, interfaceName);
             if (definition != null)
+            {
                 return definition;
+            }
         }
 
         return $"Interface '{interfaceName}' not found in package {packageId}.";
     }
-
     private async Task<string?> TryGetInterfaceFromEntry(ZipArchiveEntry entry, string interfaceName)
     {
         try
         {
-            // Read the DLL into memory
-            using var entryStream = entry.Open();
-            using var ms = new MemoryStream();
-            await entryStream.CopyToAsync(ms);
-
-            var assemblyData = ms.ToArray();
-            var assembly = PackageService.LoadAssemblyFromMemory(assemblyData);
-
-            if (assembly == null) return null;
+            var assembly = await LoadAssemblyFromEntryAsync(entry);
+            if (assembly == null)
+            {
+                return null;
+            }
 
             var iface = assembly.GetTypes()
                 .FirstOrDefault(t =>
                 {
-                    if (!t.IsInterface) return false;
+                    if (!t.IsInterface)
+                    {
+                        return false;
+                    }
 
                     // Exact match
-                    if (t.Name == interfaceName) return true;
+                    if (t.Name == interfaceName)
+                    {
+                        return true;
+                    }
 
                     // For generic types, compare the name part before the backtick
-                    if (!t.IsGenericType) return false;
+                    if (!t.IsGenericType)
+                    {
+                        return false;
+                    }
+
                     {
                         var backtickIndex = t.Name.IndexOf('`');
                         if (backtickIndex > 0)
@@ -135,7 +148,9 @@ public class GetInterfaceDefinitionTool : McpToolBase<GetInterfaceDefinitionTool
                 });
 
             if (iface == null)
+            {
                 return null;
+            }
 
             return _formattingService.FormatInterfaceDefinition(iface, Path.GetFileName(entry.FullName));
         }

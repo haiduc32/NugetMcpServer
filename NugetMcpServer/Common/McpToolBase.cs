@@ -1,5 +1,9 @@
 using Microsoft.Extensions.Logging;
 using NuGetMcpServer.Services;
+using System.IO;
+using System.IO.Compression;
+using System.Reflection;
+using System.Threading.Tasks;
 
 namespace NuGetMcpServer.Common;
 
@@ -10,4 +14,19 @@ public abstract class McpToolBase<T>(ILogger<T> logger, NuGetPackageService pack
 {
     protected readonly ILogger<T> Logger = logger;
     protected readonly NuGetPackageService PackageService = packageService;
+
+    /// <summary>
+    /// Loads an assembly from a zip archive entry
+    /// </summary>
+    /// <param name="entry">Zip archive entry containing a DLL</param>
+    /// <returns>Loaded assembly or null if loading failed</returns>
+    protected async Task<Assembly?> LoadAssemblyFromEntryAsync(ZipArchiveEntry entry)
+    {
+        using var entryStream = entry.Open();
+        using var ms = new MemoryStream();
+        await entryStream.CopyToAsync(ms);
+
+        var assemblyData = ms.ToArray();
+        return PackageService.LoadAssemblyFromMemory(assemblyData);
+    }
 }

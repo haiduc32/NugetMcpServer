@@ -22,7 +22,11 @@ namespace NuGetMcpServer.Extensions
             { typeof(char), "char" },
             { typeof(object), "object" },
             { typeof(decimal), "decimal" },
-            { typeof(void), "void" }
+            { typeof(void), "void" },
+            { typeof(ulong), "ulong" },
+            { typeof(uint), "uint" },
+            { typeof(ushort), "ushort" },
+            { typeof(sbyte), "sbyte" }
         };
 
         /// <summary>
@@ -33,7 +37,9 @@ namespace NuGetMcpServer.Extensions
         public static string FormatCSharpTypeName(this Type type)
         {
             if (PrimitiveTypeMap.TryGetValue(type, out var mappedName))
+            {
                 return mappedName;
+            }
 
             // Handle generic types
             if (type.IsGenericType)
@@ -42,7 +48,9 @@ namespace NuGetMcpServer.Extensions
                 var tickIndex = genericTypeName.IndexOf('`');
 
                 if (tickIndex > 0)
+                {
                     genericTypeName = genericTypeName.Substring(0, tickIndex);
+                }
 
                 var genericArgs = type.GetGenericArguments();
                 return $"{genericTypeName}<{string.Join(", ", genericArgs.Select(FormatCSharpTypeName))}>";
@@ -61,7 +69,9 @@ namespace NuGetMcpServer.Extensions
         {
             var tickIndex = typeName.IndexOf('`');
             if (tickIndex <= 0)
+            {
                 return typeName;
+            }
 
             var baseName = typeName.Substring(0, tickIndex);
             var numGenericArgs = int.Parse(typeName.Substring(tickIndex + 1));
@@ -80,7 +90,9 @@ namespace NuGetMcpServer.Extensions
         {
             var lastDot = fullTypeName.LastIndexOf('.');
             if (lastDot <= 0)
+            {
                 return fullTypeName.FormatGenericTypeName();
+            }
 
             var ns = fullTypeName.Substring(0, lastDot + 1);
             var name = fullTypeName.Substring(lastDot + 1);

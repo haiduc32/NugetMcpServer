@@ -37,6 +37,7 @@ internal class Program
         builder.Services.AddSingleton<HttpClient>();
         builder.Services.AddSingleton<NuGetPackageService>();
         builder.Services.AddSingleton<InterfaceFormattingService>();
+        builder.Services.AddSingleton<EnumFormattingService>();
 
         // Register MCP server and STDIO transport
         builder.Services
