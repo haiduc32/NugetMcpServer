@@ -140,12 +140,11 @@ public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
                 .AsSamplingChatClient()
                 .GetResponseAsync(messages, options, cancellationToken);
 
-            // Split by line endings and filter empty results
             var names = response.ToString()
-                .Split(new[] { "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries)
+                .Split(["\r", "\n"], StringSplitOptions.RemoveEmptyEntries)
                 .Select(s => s.Trim())
                 .Where(s => !string.IsNullOrWhiteSpace(s))
-                .Take(packageCount) // ensure we return at most the requested count
+                .Take(packageCount)
                 .ToList();
 
             return names.AsReadOnly();
@@ -153,7 +152,7 @@ public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to generate NuGet package names for query: {Query}", originalQuery);
-            return Array.Empty<string>();
+            return [];
         }
     }
 
