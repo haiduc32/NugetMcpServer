@@ -69,12 +69,10 @@ public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
                 Packages = directResults.Take(maxResults).ToList(),
                 UsedAiKeywords = false
             };
-        }
+        }        // Phase 2: Fuzzy search - enhance with AI-generated package name alternatives
+        var aiPackageNames = await GeneratePackageNamesAsync(thisServer, query, 10, cancellationToken);
 
-        // Phase 2: Fuzzy search - enhance with AI-generated package name alternatives
-        var aiPackageNames = await GeneratePackageNamesAsync(thisServer, query, cancellationToken);
-
-        if (string.IsNullOrWhiteSpace(aiPackageNames))
+        if (aiPackageNames == null || !aiPackageNames.Any())
         {
             Logger.LogWarning("AI package name generation failed or returned empty result");
             return new PackageSearchResult
@@ -86,26 +84,31 @@ public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
             };
         }
 
-        Logger.LogInformation("Generated AI package names: {PackageNames}", aiPackageNames); var aiResults = await PackageService.SearchPackagesAsync(aiPackageNames, maxResults);
-        Logger.LogInformation("AI-enhanced fuzzy search found {Count} additional packages", aiResults.Count);
+        Logger.LogInformation("Generated AI package names: {PackageNames}", string.Join(", ", aiPackageNames));
+
+        var allAiResults = new List<Services.PackageInfo>();
+        foreach (var packageName in aiPackageNames)
+        {
+            var searchResults = await PackageService.SearchPackagesAsync(packageName, maxResults);
+            allAiResults.AddRange(searchResults);
+        }
+        Logger.LogInformation("AI-enhanced fuzzy search found {Count} additional packages", allAiResults.Count);
 
         // Combine results, removing duplicates by package ID and sorting by popularity
         var combinedResults = directResults
-            .Concat(aiResults)
+            .Concat(allAiResults)
             .GroupBy(p => p.Id.ToLowerInvariant())
             .Select(g => g.First())
             .OrderByDescending(p => p.DownloadCount)
             .Take(maxResults)
-            .ToList();
-
-        return new PackageSearchResult
-        {
-            Query = query,
-            TotalCount = combinedResults.Count,
-            Packages = combinedResults,
-            UsedAiKeywords = true,
-            AiKeywords = aiPackageNames
-        };
+            .ToList(); return new PackageSearchResult
+            {
+                Query = query,
+                TotalCount = combinedResults.Count,
+                Packages = combinedResults,
+                UsedAiKeywords = true,
+                AiKeywords = string.Join(", ", aiPackageNames)
+            };
     }
 
     private async Task<IReadOnlyCollection<string>> GeneratePackageNamesAsync(
