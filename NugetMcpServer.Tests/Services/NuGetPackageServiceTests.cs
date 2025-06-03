@@ -81,7 +81,7 @@ namespace NugetMcpServer.Tests.Services
             Assert.NotNull(results);
             Assert.NotEmpty(results);
             Assert.True(results.Count <= 5);
-            
+
             foreach (var package in results)
             {
                 Assert.NotEmpty(package.Id);

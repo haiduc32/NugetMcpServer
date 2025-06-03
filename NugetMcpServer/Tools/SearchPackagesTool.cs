@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading;
@@ -7,11 +8,9 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
-using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
 using NuGetMcpServer.Common;
-using NuGetMcpServer.Extensions;
 using NuGetMcpServer.Services;
 
 using static NuGetMcpServer.Extensions.ExceptionHandlingExtensions;
@@ -25,45 +24,44 @@ public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
         : base(logger, packageService)
     {
     }
-
     [McpServerTool]
     [Description(
         "Searches for NuGet packages by description or functionality. " +
-        "Uses a two-phase approach: direct search first, then AI-enhanced keyword search if needed. " +
-        "Returns up to 20 most popular packages with details including download counts."
+        "Standard search uses only the original query. " +
+        "Fuzzy search enhances results by combining standard search with AI-generated package name alternatives " +
+        "based on the described functionality. Returns up to 50 most popular packages with details."
     )]
     public Task<PackageSearchResult> SearchPackages(
         IMcpServer thisServer,
         [Description("Description of the functionality you're looking for")] string query,
         [Description("Maximum number of results to return (default: 20)")] int maxResults = 20,
+        [Description("Enable fuzzy search to include AI-generated package name alternatives (default: false)")] bool fuzzySearch = false,
         CancellationToken cancellationToken = default)
     {
         return ExecuteWithLoggingAsync(
-            () => SearchPackagesCore(thisServer, query, maxResults, cancellationToken),
+            () => SearchPackagesCore(thisServer, query, maxResults, fuzzySearch, cancellationToken),
             Logger,
             "Error searching packages");
     }
-
     private async Task<PackageSearchResult> SearchPackagesCore(
-        IMcpServer thisServer, 
-        string query, 
-        int maxResults, 
+        IMcpServer thisServer,
+        string query,
+        int maxResults,
+        bool fuzzySearch,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Query cannot be empty", nameof(query));
 
         if (maxResults <= 0 || maxResults > 50)
-            maxResults = 20;
+            maxResults = 20; Logger.LogInformation("Starting package search for query: {Query}, fuzzy: {FuzzySearch}", query, fuzzySearch);
 
-        Logger.LogInformation("Starting package search for query: {Query}", query);
-
-        // Phase 1: Direct search
+        // Phase 1: Standard search with original query
         var directResults = await PackageService.SearchPackagesAsync(query, maxResults);
-        
-        if (directResults.Count > 0)
+        Logger.LogInformation("Standard search found {Count} packages", directResults.Count);
+
+        if (!fuzzySearch)
         {
-            Logger.LogInformation("Direct search found {Count} packages", directResults.Count);
             return new PackageSearchResult
             {
                 Query = query,
@@ -73,56 +71,64 @@ public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
             };
         }
 
-        Logger.LogInformation("Direct search found no results, trying AI-enhanced search");
+        // Phase 2: Fuzzy search - enhance with AI-generated package name alternatives
+        var aiPackageNames = await GeneratePackageNamesAsync(thisServer, query, cancellationToken);
 
-        // Phase 2: AI-enhanced keyword search
-        var aiKeywords = await GenerateSearchKeywordsAsync(thisServer, query, cancellationToken);
-        
-        if (string.IsNullOrWhiteSpace(aiKeywords))
+        if (string.IsNullOrWhiteSpace(aiPackageNames))
         {
-            Logger.LogWarning("AI keyword generation failed or returned empty result");
+            Logger.LogWarning("AI package name generation failed or returned empty result");
             return new PackageSearchResult
             {
                 Query = query,
-                TotalCount = 0,
-                Packages = [],
+                TotalCount = directResults.Count,
+                Packages = directResults.Take(maxResults).ToList(),
                 UsedAiKeywords = false
             };
         }
 
-        Logger.LogInformation("Generated AI keywords: {Keywords}", aiKeywords);
+        Logger.LogInformation("Generated AI package names: {PackageNames}", aiPackageNames); var aiResults = await PackageService.SearchPackagesAsync(aiPackageNames, maxResults);
+        Logger.LogInformation("AI-enhanced fuzzy search found {Count} additional packages", aiResults.Count);
 
-        var aiResults = await PackageService.SearchPackagesAsync(aiKeywords, maxResults);
-        
+        // Combine results, removing duplicates by package ID and sorting by popularity
+        var combinedResults = directResults
+            .Concat(aiResults)
+            .GroupBy(p => p.Id.ToLowerInvariant())
+            .Select(g => g.First())
+            .OrderByDescending(p => p.DownloadCount)
+            .Take(maxResults)
+            .ToList();
+
         return new PackageSearchResult
         {
             Query = query,
-            TotalCount = aiResults.Count,
-            Packages = aiResults.Take(maxResults).ToList(),
+            TotalCount = combinedResults.Count,
+            Packages = combinedResults,
             UsedAiKeywords = true,
-            AiKeywords = aiKeywords
+            AiKeywords = aiPackageNames
         };
     }
 
-    private async Task<string> GenerateSearchKeywordsAsync(
-        IMcpServer thisServer, 
-        string originalQuery, 
-        CancellationToken cancellationToken)
+    private async Task<IReadOnlyCollection<string>> GeneratePackageNamesAsync(
+    IMcpServer thisServer,
+    string originalQuery,
+    int packageCount,
+    CancellationToken cancellationToken)
     {
+        // Build a very small‑LLM‑friendly prompt
+        var prompt =
+            $@"Given the request: '{originalQuery}', list exactly {packageCount} likely NuGet package names that would satisfy it. \n" +
+            "Use typical .NET naming patterns (suffixes such as Generator, Builder, Client, Service, Helper, Manager, Processor, Handler, Framework). \n" +
+            "Return exactly {packageCount} lines, one package name per line, no extra text.";
+
         var messages = new[]
         {
-            new ChatMessage(
-                role: ChatRole.User,
-                content: $"Generate NuGet package search keywords for this request: \"{originalQuery}\". " +
-                        "Return only the most relevant technical terms and library names that could match NuGet packages. " +
-                        "Separate keywords with spaces. Focus on: framework names, technology terms, common library patterns."
-            )
+            new ChatMessage(ChatRole.User, prompt)
         };
 
         var options = new ChatOptions
         {
-            MaxOutputTokens = 100,
-            Temperature = 0.3f
+            MaxOutputTokens = 40,
+            Temperature = 0.2f
         };
 
         try
@@ -131,12 +137,21 @@ public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
                 .AsSamplingChatClient()
                 .GetResponseAsync(messages, options, cancellationToken);
 
-            return response.ToString().Trim();
+            // Split by line endings and filter empty results
+            var names = response.ToString()
+                .Split(new[] { "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim())
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Take(packageCount) // ensure we return at most the requested count
+                .ToList();
+
+            return names.AsReadOnly();
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to generate AI keywords for query: {Query}", originalQuery);
-            return string.Empty;
+            Logger.LogError(ex, "Failed to generate NuGet package names for query: {Query}", originalQuery);
+            return Array.Empty<string>();
         }
     }
+
 }

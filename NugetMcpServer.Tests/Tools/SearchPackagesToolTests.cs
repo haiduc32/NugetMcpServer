@@ -20,7 +20,8 @@ public class SearchPackagesToolTests : TestBase
         _toolLogger = new TestLogger<SearchPackagesTool>(TestOutput);
         _packageService = new NuGetPackageService(_packageLogger, HttpClient);
         _tool = new SearchPackagesTool(_toolLogger, _packageService);
-    }    [Fact]
+    }
+    [Fact]
     public async Task SearchPackages_WithPopularQuery_ReturnsResults()
     {
         // Note: This test might require AI functionality, skipping the AI part for now
@@ -115,15 +116,54 @@ public class SearchPackagesToolTests : TestBase
         };
 
         // Act
-        var formatted = result.ToFormattedString();
-
-        // Assert
+        var formatted = result.ToFormattedString();        // Assert
         Assert.Contains("need math library", formatted);
-        Assert.Contains("AI-GENERATED KEYWORDS", formatted);
+        Assert.Contains("AI-GENERATED PACKAGE NAMES", formatted);
         Assert.Contains("math mathematics numerics calculation", formatted);
         Assert.Contains("MathNet.Numerics", formatted);
 
         TestOutput.WriteLine("Formatted result with AI keywords:");
+        TestOutput.WriteLine(formatted);
+    }
+
+    [Fact]
+    public void PackageSearchResult_WithFuzzySearch_ShowsCombinedResults()
+    {
+        // Arrange
+        var result = new PackageSearchResult
+        {
+            Query = "need library for maze generation",
+            TotalCount = 2,
+            UsedAiKeywords = true,
+            AiKeywords = "MazeGenerator MazeBuilder MazeCreator",
+            Packages = new List<PackageInfo>
+            {
+                new()
+                {
+                    Id = "MazeLib",
+                    Version = "1.0.0",
+                    DownloadCount = 10000,
+                    Description = "Library for maze operations"
+                },
+                new()
+                {
+                    Id = "MazeGenerator",
+                    Version = "2.1.0",
+                    DownloadCount = 50000,
+                    Description = "Advanced maze generation toolkit"
+                }
+            }
+        };
+
+        // Act
+        var formatted = result.ToFormattedString();        // Assert
+        Assert.Contains("need library for maze generation", formatted);
+        Assert.Contains("AI-GENERATED PACKAGE NAMES", formatted);
+        Assert.Contains("MazeGenerator MazeBuilder MazeCreator", formatted);
+        Assert.Contains("MazeLib", formatted);
+        Assert.Contains("MazeGenerator", formatted);
+
+        TestOutput.WriteLine("Formatted fuzzy search result:");
         TestOutput.WriteLine(formatted);
     }
 }

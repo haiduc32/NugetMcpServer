@@ -22,15 +22,13 @@ public class PackageSearchResult
     /// <summary>
     /// List of found packages
     /// </summary>
-    public List<PackageInfo> Packages { get; set; } = [];
-
-    /// <summary>
-    /// Indicates if the search used AI-generated keywords
-    /// </summary>
+    public List<PackageInfo> Packages { get; set; } = [];    /// <summary>
+                                                             /// Indicates if the search used AI-generated package names (fuzzy search)
+                                                             /// </summary>
     public bool UsedAiKeywords { get; set; }
 
     /// <summary>
-    /// AI-generated keywords used for search (if any)
+    /// AI-generated package names used for fuzzy search (if any)
     /// </summary>
     public string? AiKeywords { get; set; }
 
@@ -41,12 +39,11 @@ public class PackageSearchResult
     {
         var sb = new StringBuilder();
         sb.AppendLine($"/* NUGET PACKAGE SEARCH RESULTS FOR: {Query} */");
-        
         if (UsedAiKeywords && !string.IsNullOrEmpty(AiKeywords))
         {
-            sb.AppendLine($"/* AI-GENERATED KEYWORDS: {AiKeywords} */");
+            sb.AppendLine($"/* AI-GENERATED PACKAGE NAMES: {AiKeywords} */");
         }
-        
+
         sb.AppendLine($"/* FOUND {TotalCount} PACKAGES (SHOWING TOP {Packages.Count}) */");
         sb.AppendLine();
 
@@ -54,22 +51,22 @@ public class PackageSearchResult
         {
             sb.AppendLine($"## {package.Id} v{package.Version}");
             sb.AppendLine($"**Downloads**: {package.DownloadCount:N0}");
-            
+
             if (!string.IsNullOrEmpty(package.Description))
             {
                 sb.AppendLine($"**Description**: {package.Description}");
             }
-            
+
             if (!string.IsNullOrEmpty(package.ProjectUrl))
             {
                 sb.AppendLine($"**Project URL**: {package.ProjectUrl}");
             }
-            
+
             if (package.Tags?.Any() == true)
             {
                 sb.AppendLine($"**Tags**: {string.Join(", ", package.Tags)}");
             }
-            
+
             sb.AppendLine();
         }
 

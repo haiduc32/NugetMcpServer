@@ -109,7 +109,12 @@ The server uses the .NET Generic Host and includes:
 
 ### Package Search Tools
 
-- `SearchPackages(query, maxResults?)` - Searches for NuGet packages by description or functionality. Uses a two-phase approach: direct search first, then AI-enhanced keyword search if needed. Returns up to 20 most popular packages with details including download counts, descriptions, and project URLs
+- `SearchPackages(query, maxResults?, fuzzySearch?)` - Searches for NuGet packages by description or functionality. 
+  - **Standard search mode (fuzzySearch=false, default)**: Uses original query terms only
+  - **Fuzzy search mode (fuzzySearch=true)**: Enhances results by combining standard search with AI-generated package name alternatives 
+  - AI analyzes user's functional requirements and generates 3 most likely package names (e.g., "maze generation" → "MazeGenerator MazeBuilder MazeCreator")
+  - Returns up to 50 most popular packages with details including download counts, descriptions, and project URLs
+  - Results are sorted by popularity (download count) for better relevance
 
 
 ## MCP Server Response Examples
@@ -169,39 +174,71 @@ Request:
   "name": "SearchPackages",
   "parameters": {
     "query": "JSON serialization library",
-    "maxResults": 5
+    "maxResults": 5,
+    "fuzzySearch": false
   }
 }
 ```
 
-Response (formatted result shows package information):
-```
-/* NUGET PACKAGE SEARCH RESULTS FOR: JSON serialization library */
-/* FOUND 5 PACKAGES (SHOWING TOP 5) */
+#### Fuzzy Search Example
 
-## Newtonsoft.Json v13.0.3
-**Downloads**: 2,876,543,210
-**Description**: Popular high-performance JSON framework for .NET
-**Project URL**: https://www.newtonsoft.com/json
-**Tags**: json, serialization, deserialiation
+For better results with descriptive queries, enable fuzzy search:
 
-## System.Text.Json v8.0.0
-**Downloads**: 892,654,321
-**Description**: Built-in high-performance JSON serializer for .NET
-**Project URL**: https://docs.microsoft.com/en-us/dotnet/api/system.text.json
-**Tags**: json, serialization, performance
-
-## Json.NET v1.0.33
-**Downloads**: 45,123,456
-**Description**: Flexible JSON serializer for converting between .NET objects and JSON
-**Tags**: json, serialization
+Request:
+```json
+{
+  "name": "SearchPackages",
+  "parameters": {
+    "query": "I need a library for generating mazes",
+    "maxResults": 10,
+    "fuzzySearch": true
+  }
+}
 ```
 
-The search tool uses a two-phase approach:
-1. **Direct search**: Searches NuGet directly with the user's query
-2. **AI-enhanced search**: If no results found, uses AI to generate relevant keywords and searches again
+#### Russian Language Support Example
 
-This ensures the best possible results for any type of query, whether technical or descriptive.
+The AI can work with queries in Russian as well:
+
+Request:
+```json
+{
+  "name": "SearchPackages",
+  "parameters": {
+    "query": "Пользователю надо генерировать лабиринт",
+    "maxResults": 10,
+    "fuzzySearch": true
+  }
+}
+```
+
+Response (formatted result shows combined results):
+```
+/* NUGET PACKAGE SEARCH RESULTS FOR: Пользователю надо генерировать лабиринт */
+/* AI-GENERATED PACKAGE NAMES: MazeGenerator MazeBuilder MazeCreator */
+/* FOUND 8 PACKAGES (SHOWING TOP 8) */
+
+## DimonSmart.MazeGenerator v1.0.0
+**Downloads**: 12,543
+**Description**: Advanced maze generation library with multiple algorithms
+**Project URL**: https://github.com/DimonSmart/MazeGenerator
+
+## MazeBuilder v2.1.0
+**Downloads**: 8,234
+**Description**: Simple maze construction toolkit
+```
+
+#### How Fuzzy Search Works
+
+The search algorithm works as follows:
+- **Standard search mode (fuzzySearch=false)**: Uses only the original query terms
+- **Fuzzy search mode (fuzzySearch=true)**: 
+  1. Performs standard search with original query
+  2. Uses AI to analyze the functional requirements and generate 3 most likely package names
+  3. AI considers common .NET package naming patterns (e.g., "maze generation" → "MazeGenerator MazeBuilder MazeCreator")
+  4. Searches for AI-generated package names
+  5. Combines results, removes duplicates, and sorts by popularity
+  4. Combines and deduplicates results, sorted by popularity
 
 ## Technical Details
 
