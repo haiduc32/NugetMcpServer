@@ -15,6 +15,9 @@ You can use this server with [OllamaChat](https://github.com/DimonSmart/OllamaCh
 ## Features
 
 - Real-time extraction of interfaces and enums from NuGet packages
+- **Smart package search with AI-enhanced keyword generation**
+- **Two-phase search: direct search + AI fallback for better results**
+- **Package popularity ranking by download count**
 - Reduces LLM hallucinations by giving accurate API information
 - Supports specific package versions or latest version
 - Supports generic types with correct C# formatting
@@ -104,6 +107,10 @@ The server uses the .NET Generic Host and includes:
 
 - `GetEnumDefinition(packageId, enumName, version?)` - Gets the C# enum definition from a NuGet package. Parameters: packageId (NuGet package ID), enumName (short name without namespace), version (optional, defaults to latest)
 
+### Package Search Tools
+
+- `SearchPackages(query, maxResults?)` - Searches for NuGet packages by description or functionality. Uses a two-phase approach: direct search first, then AI-enhanced keyword search if needed. Returns up to 20 most popular packages with details including download counts, descriptions, and project URLs
+
 
 ## MCP Server Response Examples
 
@@ -146,6 +153,55 @@ The result is the actual JSON response from the MCP server:
 - The content is inside the `result` property as a JSON string
 
 This is how an agent receives the interface definition from the MCP server. The agent then parses and displays it in a readable format for the user.
+
+### SearchPackages Example
+
+#### User Query Example
+A user might ask:
+
+> "I need a library for working with JSON in my .NET application. Can you help me find the most popular packages for JSON handling?"
+
+The agent would use the MCP server to search for packages:
+
+Request:
+```json
+{
+  "name": "SearchPackages",
+  "parameters": {
+    "query": "JSON serialization library",
+    "maxResults": 5
+  }
+}
+```
+
+Response (formatted result shows package information):
+```
+/* NUGET PACKAGE SEARCH RESULTS FOR: JSON serialization library */
+/* FOUND 5 PACKAGES (SHOWING TOP 5) */
+
+## Newtonsoft.Json v13.0.3
+**Downloads**: 2,876,543,210
+**Description**: Popular high-performance JSON framework for .NET
+**Project URL**: https://www.newtonsoft.com/json
+**Tags**: json, serialization, deserialiation
+
+## System.Text.Json v8.0.0
+**Downloads**: 892,654,321
+**Description**: Built-in high-performance JSON serializer for .NET
+**Project URL**: https://docs.microsoft.com/en-us/dotnet/api/system.text.json
+**Tags**: json, serialization, performance
+
+## Json.NET v1.0.33
+**Downloads**: 45,123,456
+**Description**: Flexible JSON serializer for converting between .NET objects and JSON
+**Tags**: json, serialization
+```
+
+The search tool uses a two-phase approach:
+1. **Direct search**: Searches NuGet directly with the user's query
+2. **AI-enhanced search**: If no results found, uses AI to generate relevant keywords and searches again
+
+This ensures the best possible results for any type of query, whether technical or descriptive.
 
 ## Technical Details
 
@@ -194,10 +250,12 @@ This MCP server helps solve a big problem in AI-assisted development: **LLM hall
 
 ### Use Cases
 
+- **Package Discovery**: Search for packages by functionality description and see popularity metrics
 - **API Discovery**: See what interfaces are in a package before using it
 - **Version Migration**: Compare interfaces between package versions when upgrading
 - **Code Generation**: Generate accurate code from real package interfaces
 - **Documentation**: Get up-to-date interface documentation for development
+- **Technology Research**: Find the most popular packages for specific technologies or patterns
 
 ## About the MCP Protocol
 
