@@ -3,11 +3,17 @@
     <VersionPrefix>1.0.4</VersionPrefix>
     <VersionSuffix></VersionSuffix>
   </PropertyGroup>
-
   <PropertyGroup>
     <Version>$(VersionPrefix)$(VersionSuffix)</Version>
     <AssemblyVersion>$(VersionPrefix).0</AssemblyVersion>
     <FileVersion>$(VersionPrefix).0</FileVersion>
     <InformationalVersion>$(VersionPrefix)$(VersionSuffix)</InformationalVersion>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Company>DimonSmart</Company>
+    <Product>NugetMcpServer</Product>
+    <Description>MCP server for searching interfaces and their methods inside NuGet packages.</Description>
+    <Copyright>© 2025 DimonSmart</Copyright>
   </PropertyGroup>
 </Project>

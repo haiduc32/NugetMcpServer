@@ -1,6 +1,7 @@
-using NuGetMcpServer.Extensions;
 using System;
 using System.Text;
+
+using NuGetMcpServer.Extensions;
 
 namespace NuGetMcpServer.Services;
 

@@ -1,5 +1,7 @@
-using NuGetMcpServer.Services;
 using System;
+
+using NuGetMcpServer.Services;
+
 using Xunit;
 
 namespace NuGetMcpServer.Tests.Services;
@@ -23,7 +25,8 @@ public class EnumFormattingServiceTests
         Assert.Contains("Third = 2", result);
     }
 
-    [Fact]    public void FormatEnumDefinition_Should_Format_EnumWithExplicitValues()
+    [Fact]
+    public void FormatEnumDefinition_Should_Format_EnumWithExplicitValues()
     {
         // Arrange
         var enumType = typeof(TestEnumWithValues);
@@ -54,7 +57,8 @@ public class EnumFormattingServiceTests
         Assert.Contains("Value2 = 9223372036854775808UL", result); // 2^63
     }
 
-    [Fact]    public void FormatEnumDefinition_Should_ThrowArgumentException_WhenTypeIsNotEnum()
+    [Fact]
+    public void FormatEnumDefinition_Should_ThrowArgumentException_WhenTypeIsNotEnum()
     {
         // Arrange
         var nonEnumType = typeof(string);

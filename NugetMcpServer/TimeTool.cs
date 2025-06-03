@@ -1,6 +1,7 @@
-using ModelContextProtocol.Server;
 using System;
 using System.ComponentModel;
+
+using ModelContextProtocol.Server;
 
 namespace NugetMcpServer;
 

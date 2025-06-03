@@ -1,7 +1,10 @@
-using NugetMcpServer.Tests.Helpers;
-using NuGetMcpServer.Services;
 using System.IO;
 using System.Reflection;
+
+using NugetMcpServer.Tests.Helpers;
+
+using NuGetMcpServer.Services;
+
 using Xunit.Abstractions;
 
 namespace NugetMcpServer.Tests.Services

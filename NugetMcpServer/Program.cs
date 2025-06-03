@@ -1,13 +1,15 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using NuGetMcpServer.Services;
-using NuGetMcpServer.Tools;
-using System;
+﻿using System;
 using System.Linq;
 using System.Net.Http;
 using System.Reflection;
 using System.Threading.Tasks;
+
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
+using NuGetMcpServer.Services;
+using NuGetMcpServer.Tools;
 
 internal class Program
 {

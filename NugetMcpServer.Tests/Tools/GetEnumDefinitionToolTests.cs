@@ -1,11 +1,15 @@
-using Microsoft.Extensions.Logging;
-using Moq;
-using NuGetMcpServer.Services;
-using NuGetMcpServer.Tools;
 using System;
 using System.IO;
 using System.Net.Http;
 using System.Threading.Tasks;
+
+using Microsoft.Extensions.Logging;
+
+using Moq;
+
+using NuGetMcpServer.Services;
+using NuGetMcpServer.Tools;
+
 using Xunit;
 
 namespace NuGetMcpServer.Tests.Tools;
@@ -17,11 +21,12 @@ public class GetEnumDefinitionToolTests
     private readonly Mock<HttpClient> _httpClientMock = new();
     private readonly NuGetPackageService _packageService;
     private readonly Mock<EnumFormattingService> _formattingServiceMock = new();
-    
+
     public GetEnumDefinitionToolTests()
     {
         _packageService = new NuGetPackageService(_packageLoggerMock.Object, _httpClientMock.Object);
-    }    [Fact]
+    }
+    [Fact]
     public async Task GetEnumDefinition_Should_ThrowArgumentNullException_When_PackageIdIsEmpty()
     {
         // Arrange

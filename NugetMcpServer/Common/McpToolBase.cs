@@ -1,9 +1,11 @@
-using Microsoft.Extensions.Logging;
-using NuGetMcpServer.Services;
 using System.IO;
 using System.IO.Compression;
 using System.Reflection;
 using System.Threading.Tasks;
+
+using Microsoft.Extensions.Logging;
+
+using NuGetMcpServer.Services;
 
 namespace NuGetMcpServer.Common;
 

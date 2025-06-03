@@ -1,14 +1,18 @@
-using Microsoft.Extensions.Logging;
-using ModelContextProtocol.Server;
-using NuGetMcpServer.Common;
-using NuGetMcpServer.Extensions;
-using NuGetMcpServer.Services;
 using System;
 using System.ComponentModel;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Threading.Tasks;
+
+using Microsoft.Extensions.Logging;
+
+using ModelContextProtocol.Server;
+
+using NuGetMcpServer.Common;
+using NuGetMcpServer.Extensions;
+using NuGetMcpServer.Services;
+
 using static NuGetMcpServer.Extensions.ExceptionHandlingExtensions;
 
 namespace NuGetMcpServer.Tools;

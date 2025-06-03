@@ -1,7 +1,10 @@
+using System.Diagnostics;
+
 using NugetMcpServer.Tests.Helpers;
+
 using NuGetMcpServer.Services;
 using NuGetMcpServer.Tools;
-using System.Diagnostics;
+
 using Xunit.Abstractions;
 
 namespace NugetMcpServer.Tests.Integration;

@@ -1,6 +1,9 @@
 using Microsoft.Extensions.Logging;
+
 using Moq;
+
 using NuGetMcpServer.Extensions;
+
 using Xunit.Abstractions;
 
 namespace NugetMcpServer.Tests.Extensions;
