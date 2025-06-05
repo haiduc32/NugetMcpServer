@@ -82,7 +82,7 @@ public class NuGetPackageService(ILogger<NuGetPackageService> logger, HttpClient
     /// <param name="query">Search query</param>
     /// <param name="take">Maximum number of results to return</param>
     /// <returns>List of matching packages</returns>
-    public async Task<List<PackageInfo>> SearchPackagesAsync(string query, int take = 20)
+    public async Task<IReadOnlyCollection<PackageInfo>> SearchPackagesAsync(string query, int take = 20)
     {
         if (string.IsNullOrWhiteSpace(query))
             return [];
@@ -90,7 +90,6 @@ public class NuGetPackageService(ILogger<NuGetPackageService> logger, HttpClient
         var searchUrl = $"https://azuresearch-usnc.nuget.org/query" +
                        $"?q={Uri.EscapeDataString(query)}" +
                        $"&take={take}" +
-                       $"&packageType=Dependency" +
                        $"&sortBy=popularity-desc";
 
         logger.LogInformation("Searching packages with query '{Query}' from {Url}", query, searchUrl);

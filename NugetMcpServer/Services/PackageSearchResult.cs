@@ -22,9 +22,11 @@ public class PackageSearchResult
     /// <summary>
     /// List of found packages
     /// </summary>
-    public List<PackageInfo> Packages { get; set; } = [];    /// <summary>
-                                                             /// Indicates if the search used AI-generated package names (fuzzy search)
-                                                             /// </summary>
+    public List<PackageInfo> Packages { get; set; } = [];
+
+    /// <summary>
+    /// Indicates if the search used AI-generated package names (fuzzy search)
+    /// </summary>
     public bool UsedAiKeywords { get; set; }
 
     /// <summary>
