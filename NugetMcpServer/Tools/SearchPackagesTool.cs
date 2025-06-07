@@ -55,7 +55,8 @@ public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
             throw new ArgumentException("Query cannot be empty", nameof(query));
 
         if (maxResults <= 0 || maxResults > 100)
-            maxResults = 100; Logger.LogInformation("Starting package search for query: {Query}, fuzzy: {FuzzySearch}", query, fuzzySearch);
+            maxResults = 100;
+        Logger.LogInformation("Starting package search for query: {Query}, fuzzy: {FuzzySearch}", query, fuzzySearch);
 
         // Phase 1: Standard search with original query
         var directResults = await PackageService.SearchPackagesAsync(query, maxResults);
@@ -70,12 +71,10 @@ public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
                 Packages = directResults.Take(maxResults).ToList(),
                 UsedAiKeywords = false
             };
-        }
-
-        // Phase 2: Fuzzy search - enhance with AI-generated package name alternatives
+        }        // Phase 2: Fuzzy search - enhance with AI-generated package name alternatives
         var aiPackageNames = await AIGeneratePackageNamesAsync(thisServer, query, 10, cancellationToken);
 
-        if (aiPackageNames.Any())
+        if (!aiPackageNames.Any())
         {
             Logger.LogWarning("AI package name generation failed or returned empty result");
             return new PackageSearchResult
@@ -89,17 +88,13 @@ public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
 
         Logger.LogInformation("Generated AI package names: {PackageNames}", string.Join(", ", aiPackageNames));
 
-        var allAiResults = new List<Services.PackageInfo>();
-        foreach (var packageName in aiPackageNames)
-        {
-            var searchResults = await PackageService.SearchPackagesAsync(packageName, maxResults);
-            allAiResults.AddRange(searchResults);
-        }
-        Logger.LogInformation("AI-enhanced fuzzy search found {Count} additional packages", allAiResults.Count);
+        // Search for packages using balanced approach to avoid popular keywords overwhelming specific ones
+        var balancedAiResults = await SearchWithBalancedResultsAsync(aiPackageNames, maxResults, cancellationToken);
+        Logger.LogInformation("AI-enhanced fuzzy search found {Count} balanced packages", balancedAiResults.Count);
 
         // Combine results, removing duplicates by package ID and sorting by popularity
         var combinedResults = directResults
-            .Concat(allAiResults)
+            .Concat(balancedAiResults)
             .GroupBy(p => p.Id.ToLowerInvariant())
             .Select(g => g.First())
             .OrderByDescending(p => p.DownloadCount)
@@ -125,7 +120,6 @@ public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
         var prompts = new[]
         {
             PromptConstants.PackageSearchPrompt,
-            PromptConstants.AlternativePackageSearchPrompt
         };
 
         var allResults = new List<string>();
@@ -181,6 +175,88 @@ public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
             .Select(s => s.Trim())
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .Take(expectedCount);
+    }
+
+    private async Task<List<Services.PackageInfo>> SearchWithBalancedResultsAsync(
+        IReadOnlyCollection<string> keywords,
+        int maxTotalResults,
+        CancellationToken cancellationToken)
+    {
+        if (!keywords.Any())
+            return new List<Services.PackageInfo>();
+
+        var keywordResults = new Dictionary<string, List<Services.PackageInfo>>();
+        var resultsPerKeyword = Math.Max(1, maxTotalResults / keywords.Count);
+        var remainingSlots = maxTotalResults % keywords.Count;
+
+        // Search for each keyword separately
+        foreach (var keyword in keywords)
+        {
+            try
+            {
+                var results = await PackageService.SearchPackagesAsync(keyword, resultsPerKeyword + 10);
+                keywordResults[keyword] = results.ToList();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Failed to search packages for keyword: {Keyword}", keyword);
+                keywordResults[keyword] = new List<Services.PackageInfo>();
+            }
+        }
+
+        // Balance the results - take equal amounts from each keyword
+        var balancedResults = new List<Services.PackageInfo>();
+        var usedPackageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // First pass: take equal amounts from each keyword
+        for (var i = 0; i < resultsPerKeyword; i++)
+        {
+            foreach (var keyword in keywords)
+            {
+                if (!keywordResults.TryGetValue(keyword, out var results) || i >= results.Count)
+                    continue;
+
+                var package = results[i];
+                if (usedPackageIds.Add(package.Id))
+                {
+                    balancedResults.Add(package);
+
+                    if (balancedResults.Count >= maxTotalResults)
+                        return balancedResults;
+                }
+            }
+        }
+
+        // Second pass: distribute remaining slots to keywords with more results
+        var keywordsWithMoreResults = keywordResults
+            .Where(kv => kv.Value.Count > resultsPerKeyword)
+            .OrderByDescending(kv => kv.Value.Count)
+            .ToList();
+
+        var currentKeywordIndex = 0;
+        while (balancedResults.Count < maxTotalResults && remainingSlots > 0 && keywordsWithMoreResults.Any())
+        {
+            var keywordPair = keywordsWithMoreResults[currentKeywordIndex % keywordsWithMoreResults.Count];
+            var results = keywordPair.Value;
+
+            for (var i = resultsPerKeyword; i < results.Count && balancedResults.Count < maxTotalResults && remainingSlots > 0; i++)
+            {
+                var package = results[i];
+                if (usedPackageIds.Add(package.Id))
+                {
+                    balancedResults.Add(package);
+                    remainingSlots--;
+                    break;
+                }
+            }
+
+            currentKeywordIndex++;
+        }
+        Logger.LogInformation("Balanced search results: {TotalResults} packages from {KeywordCount} keywords. " +
+                                      "Results per keyword: {ResultsPerKeyword}, remaining slots distributed: {RemainingSlots}",
+            balancedResults.Count, keywords.Count, resultsPerKeyword, maxTotalResults % keywords.Count);
+
+        return balancedResults;
     }
 
 }
