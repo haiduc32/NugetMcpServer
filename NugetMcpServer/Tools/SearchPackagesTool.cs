@@ -58,7 +58,7 @@ public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
             maxResults = 100;
         Logger.LogInformation("Starting package search for query: {Query}, fuzzy: {FuzzySearch}", query, fuzzySearch);
 
-        // Phase 1: Standard search with original query
+        // Phase 1: Just in case - let's do direct serach
         var directResults = await PackageService.SearchPackagesAsync(query, maxResults);
         Logger.LogInformation("Standard search found {Count} packages", directResults.Count);
 
@@ -71,7 +71,9 @@ public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
                 Packages = directResults.Take(maxResults).ToList(),
                 UsedAiKeywords = false
             };
-        }        // Phase 2: Fuzzy search - enhance with AI-generated package name alternatives
+        }        
+        
+        // Phase 2: Fuzzy search - enhance with AI-generated package name alternatives
         var aiPackageNames = await AIGeneratePackageNamesAsync(thisServer, query, 10, cancellationToken);
 
         if (!aiPackageNames.Any())
