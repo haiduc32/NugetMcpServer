@@ -19,27 +19,27 @@ using static NuGetMcpServer.Extensions.ExceptionHandlingExtensions;
 namespace NuGetMcpServer.Tools;
 
 [McpServerToolType]
-public class GetInterfaceDefinitionTool(
-    ILogger<GetInterfaceDefinitionTool> logger,
+public class GetClassDefinitionTool(
+    ILogger<GetClassDefinitionTool> logger,
     NuGetPackageService packageService,
-    InterfaceFormattingService formattingService) : McpToolBase<GetInterfaceDefinitionTool>(logger, packageService)
+    ClassFormattingService formattingService) : McpToolBase<GetClassDefinitionTool>(logger, packageService)
 {
     [McpServerTool]
-    [Description("Extracts and returns the C# interface definition from a specified NuGet package.")]
-    public Task<string> GetInterfaceDefinition(
+    [Description("Extracts and returns the C# class definition from a specified NuGet package.")]
+    public Task<string> GetClassDefinition(
         [Description("NuGet package ID")] string packageId,
-        [Description("Interface name (short name like 'IDisposable' or full name like 'System.IDisposable')")] string interfaceName,
+        [Description("Class name (short name like 'String' or full name like 'System.String')")] string className,
         [Description("Package version (optional, defaults to latest)")] string? version = null,
         [Description("Progress notification for long-running operations")] IProgress<ProgressNotificationValue>? progress = null)
     {
         return ExecuteWithLoggingAsync(
-            () => GetInterfaceDefinitionCore(packageId, interfaceName, version, progress),
+            () => GetClassDefinitionCore(packageId, className, version, progress),
             Logger,
-            "Error fetching interface definition");
+            "Error fetching class definition");
     }
-    private async Task<string> GetInterfaceDefinitionCore(
+    private async Task<string> GetClassDefinitionCore(
         string packageId,
-        string interfaceName,
+        string className,
         string? version,
         IProgress<ProgressNotificationValue>? progress)
     {
@@ -48,9 +48,9 @@ public class GetInterfaceDefinitionTool(
             throw new ArgumentNullException(nameof(packageId));
         }
 
-        if (string.IsNullOrWhiteSpace(interfaceName))
+        if (string.IsNullOrWhiteSpace(className))
         {
-            throw new ArgumentNullException(nameof(interfaceName));
+            throw new ArgumentNullException(nameof(className));
         }
 
         progress?.Report(new ProgressNotificationValue() { Progress = 10, Total = 100, Message = "Resolving package version" });
@@ -63,35 +63,35 @@ public class GetInterfaceDefinitionTool(
         packageId = packageId ?? string.Empty;
         version = version ?? string.Empty;
 
-        Logger.LogInformation("Fetching interface {InterfaceName} from package {PackageId} version {Version}",
-            interfaceName, packageId, version);
+        Logger.LogInformation("Fetching class {ClassName} from package {PackageId} version {Version}",
+            className, packageId, version);
 
         progress?.Report(new ProgressNotificationValue() { Progress = 30, Total = 100, Message = $"Downloading package {packageId} v{version}" });
 
         using var packageStream = await PackageService.DownloadPackageAsync(packageId, version, progress);
 
-        progress?.Report(new ProgressNotificationValue() { Progress = 70, Total = 100, Message = "Scanning assemblies for interface" });
+        progress?.Report(new ProgressNotificationValue() { Progress = 70, Total = 100, Message = "Scanning assemblies for class" });
 
         using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read);
-        var dllEntries = archive.Entries.Where(e => e.FullName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)).ToList();
-        var processedDlls = 0;
-
-        foreach (var entry in dllEntries)
+        foreach (var entry in archive.Entries)
         {
-            progress?.Report(new ProgressNotificationValue() { Progress = (float)(70 + (processedDlls * 25.0 / dllEntries.Count)), Total = 100, Message = $"Scanning {Path.GetFileName(entry.FullName)}: {entry.FullName}" });
+            if (!entry.FullName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
 
-            var definition = await TryGetInterfaceFromEntry(entry, interfaceName);
+            var definition = await TryGetClassFromEntry(entry, className);
             if (definition != null)
             {
-                progress?.Report(new ProgressNotificationValue() { Progress = 100, Total = 100, Message = $"Interface found: {interfaceName}" });
+                progress?.Report(new ProgressNotificationValue() { Progress = 100, Total = 100, Message = $"Class found: {className}" });
                 return definition;
             }
-            processedDlls++;
         }
 
-        return $"Interface '{interfaceName}' not found in package {packageId}.";
+        return $"Class '{className}' not found in package {packageId}.";
     }
-    private async Task<string?> TryGetInterfaceFromEntry(ZipArchiveEntry entry, string interfaceName)
+
+    private async Task<string?> TryGetClassFromEntry(ZipArchiveEntry entry, string className)
     {
         try
         {
@@ -100,22 +100,23 @@ public class GetInterfaceDefinitionTool(
             {
                 return null;
             }
-            var iface = assembly.GetTypes()
+
+            var classType = assembly.GetTypes()
                 .FirstOrDefault(t =>
                 {
-                    if (!t.IsInterface)
+                    if (!t.IsClass || !t.IsPublic)
                     {
                         return false;
                     }
 
                     // Exact match for short name
-                    if (t.Name == interfaceName)
+                    if (t.Name == className)
                     {
                         return true;
                     }
 
                     // Exact match for full name
-                    if (t.FullName == interfaceName)
+                    if (t.FullName == className)
                     {
                         return true;
                     }
@@ -131,7 +132,7 @@ public class GetInterfaceDefinitionTool(
                         if (backtickIndex > 0)
                         {
                             var baseName = t.Name.Substring(0, backtickIndex);
-                            if (baseName == interfaceName)
+                            if (baseName == className)
                             {
                                 return true;
                             }
@@ -144,7 +145,7 @@ public class GetInterfaceDefinitionTool(
                             if (fullBacktickIndex > 0)
                             {
                                 var fullBaseName = t.FullName.Substring(0, fullBacktickIndex);
-                                return fullBaseName == interfaceName;
+                                return fullBaseName == className;
                             }
                         }
                     }
@@ -152,12 +153,12 @@ public class GetInterfaceDefinitionTool(
                     return false;
                 });
 
-            if (iface == null)
+            if (classType == null)
             {
                 return null;
             }
 
-            return formattingService.FormatInterfaceDefinition(iface, Path.GetFileName(entry.FullName));
+            return formattingService.FormatClassDefinition(classType, Path.GetFileName(entry.FullName));
         }
         catch (Exception ex)
         {

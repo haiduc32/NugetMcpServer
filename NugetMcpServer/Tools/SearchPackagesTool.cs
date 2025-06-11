@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
+using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
 using NuGetMcpServer.Common;
@@ -18,37 +19,29 @@ using static NuGetMcpServer.Extensions.ExceptionHandlingExtensions;
 namespace NuGetMcpServer.Tools;
 
 [McpServerToolType]
-public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
+public class SearchPackagesTool(ILogger<SearchPackagesTool> logger, NuGetPackageService packageService) : McpToolBase<SearchPackagesTool>(logger, packageService)
 {
-    public SearchPackagesTool(ILogger<SearchPackagesTool> logger, NuGetPackageService packageService)
-        : base(logger, packageService)
-    {
-    }
     [McpServerTool]
-    [Description(
-        "Searches for NuGet packages by description or functionality. " +
-        "Standard search uses only the original query. " +
-        "Fuzzy search enhances results by combining standard search with AI-generated package name alternatives " +
-        "based on the described functionality."
-    )]
+    [Description("Searches for NuGet packages by description or functionality with optional AI-enhanced fuzzy search.")]
     public Task<PackageSearchResult> SearchPackages(
         IMcpServer thisServer,
         [Description("Description of the functionality you're looking for")] string query,
         [Description("Maximum number of results to return (default: 20, max: 100)")] int maxResults = 20,
         [Description("Enable fuzzy search to include AI-generated package name alternatives (default: false)")] bool fuzzySearch = false,
+        IProgress<ProgressNotificationValue>? progress = null,
         CancellationToken cancellationToken = default)
     {
         return ExecuteWithLoggingAsync(
-            () => SearchPackagesCore(thisServer, query, maxResults, fuzzySearch, cancellationToken),
+            () => SearchPackagesCore(thisServer, query, maxResults, fuzzySearch, progress, cancellationToken),
             Logger,
             "Error searching packages");
     }
-
     private async Task<PackageSearchResult> SearchPackagesCore(
         IMcpServer thisServer,
         string query,
         int maxResults,
         bool fuzzySearch,
+        IProgress<ProgressNotificationValue>? progress,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(query))
@@ -58,12 +51,15 @@ public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
             maxResults = 100;
         Logger.LogInformation("Starting package search for query: {Query}, fuzzy: {FuzzySearch}", query, fuzzySearch);
 
-        // Phase 1: Just in case - let's do direct serach
-        var directResults = await PackageService.SearchPackagesAsync(query, maxResults);
+        progress?.Report(new ProgressNotificationValue() { Progress = 5, Total = 100, Message = "Starting package search" });
+
+        // Phase 1: Just in case - let's do direct search
+        var directResults = await PackageService.SearchPackagesAsync(query, maxResults, progress);
         Logger.LogInformation("Standard search found {Count} packages", directResults.Count);
 
         if (!fuzzySearch)
         {
+            progress?.Report(new ProgressNotificationValue() { Progress = 100, Total = 100, Message = $"Search completed - Found {directResults.Count} packages" });
             return new PackageSearchResult
             {
                 Query = query,
@@ -71,14 +67,17 @@ public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
                 Packages = directResults.Take(maxResults).ToList(),
                 UsedAiKeywords = false
             };
-        }        
-        
+        }
+
+        progress?.Report(new ProgressNotificationValue() { Progress = 40, Total = 100, Message = "Generating AI package names" });
+
         // Phase 2: Fuzzy search - enhance with AI-generated package name alternatives
         var aiPackageNames = await AIGeneratePackageNamesAsync(thisServer, query, 10, cancellationToken);
 
         if (!aiPackageNames.Any())
         {
             Logger.LogWarning("AI package name generation failed or returned empty result");
+            progress?.Report(new ProgressNotificationValue() { Progress = 100, Total = 100, Message = "AI generation failed, using direct results" });
             return new PackageSearchResult
             {
                 Query = query,
@@ -90,9 +89,12 @@ public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
 
         Logger.LogInformation("Generated AI package names: {PackageNames}", string.Join(", ", aiPackageNames));
 
-        // Search for packages using balanced approach to avoid popular keywords overwhelming specific ones
-        var balancedAiResults = await SearchWithBalancedResultsAsync(aiPackageNames, maxResults, cancellationToken);
+        progress?.Report(new ProgressNotificationValue() { Progress = 60, Total = 100, Message = $"Searching with AI-generated keywords: {string.Join(", ", aiPackageNames)}" });
+
+        var balancedAiResults = await SearchWithBalancedResultsAsync(aiPackageNames, maxResults, progress, cancellationToken);
         Logger.LogInformation("AI-enhanced fuzzy search found {Count} balanced packages", balancedAiResults.Count);
+
+        progress?.Report(new ProgressNotificationValue() { Progress = 85, Total = 100, Message = "Combining and deduplicating results" });
 
         // Combine results, removing duplicates by package ID and sorting by popularity
         var combinedResults = directResults
@@ -102,6 +104,8 @@ public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
             .OrderByDescending(p => p.DownloadCount)
             .Take(maxResults)
             .ToList();
+
+        progress?.Report(new ProgressNotificationValue() { Progress = 100, Total = 100, Message = $"Search completed - Found {combinedResults.Count} packages" });
 
         return new PackageSearchResult
         {
@@ -179,9 +183,10 @@ public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
             .Take(expectedCount);
     }
 
-    private async Task<List<Services.PackageInfo>> SearchWithBalancedResultsAsync(
+    private async Task<IReadOnlyCollection<Services.PackageInfo>> SearchWithBalancedResultsAsync(
         IReadOnlyCollection<string> keywords,
         int maxTotalResults,
+        IProgress<ProgressNotificationValue>? progress,
         CancellationToken cancellationToken)
     {
         if (!keywords.Any())
@@ -191,12 +196,17 @@ public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
         var resultsPerKeyword = Math.Max(1, maxTotalResults / keywords.Count);
         var remainingSlots = maxTotalResults % keywords.Count;
 
+        var keywordList = keywords.ToList();
+        var processedKeywords = 0;
+
         // Search for each keyword separately
-        foreach (var keyword in keywords)
+        foreach (var keyword in keywordList)
         {
             try
             {
-                var results = await PackageService.SearchPackagesAsync(keyword, resultsPerKeyword + 10);
+                progress?.Report(new ProgressNotificationValue() { Progress = (float)(60 + (processedKeywords * 20.0 / keywordList.Count)), Total = 100, Message = $"Searching for keyword: {keyword}" });
+
+                var results = await PackageService.SearchPackagesAsync(keyword, resultsPerKeyword + 10, progress);
                 keywordResults[keyword] = results.ToList();
             }
             catch (Exception ex)
@@ -204,6 +214,7 @@ public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
                 Logger.LogWarning(ex, "Failed to search packages for keyword: {Keyword}", keyword);
                 keywordResults[keyword] = new List<Services.PackageInfo>();
             }
+            processedKeywords++;
         }
 
         // Balance the results - take equal amounts from each keyword
@@ -254,8 +265,8 @@ public class SearchPackagesTool : McpToolBase<SearchPackagesTool>
 
             currentKeywordIndex++;
         }
-        Logger.LogInformation("Balanced search results: {TotalResults} packages from {KeywordCount} keywords. " +
-                                      "Results per keyword: {ResultsPerKeyword}, remaining slots distributed: {RemainingSlots}",
+
+        Logger.LogInformation("Balanced search results: {TotalResults} packages from {KeywordCount} keywords. Results per keyword: {ResultsPerKeyword}, remaining slots distributed: {RemainingSlots}",
             balancedResults.Count, keywords.Count, resultsPerKeyword, maxTotalResults % keywords.Count);
 
         return balancedResults;

@@ -33,7 +33,6 @@ namespace NugetMcpServer.Tests.Tools
             var interfaceName = "ICell";
             var version = await _packageService.GetLatestVersion(packageId);
 
-            // Get interface definition
             var definition = await _defTool.GetInterfaceDefinition(packageId, interfaceName, version);
 
             // Assert
@@ -49,18 +48,15 @@ namespace NugetMcpServer.Tests.Tools
         [Fact]
         public async Task GetInterfaceDefinition_WithGenericInterface_ReturnsFormattedDefinition()
         {
-            // Test with a known generic interface
             var packageId = "DimonSmart.MazeGenerator";
-            var interfaceName = "IMaze";  // Generic interface (actually IMaze<T>)
+            var genericMazeInterfaceName = "IMaze";
             var version = await _packageService.GetLatestVersion(packageId);
 
-            // Get interface definition
-            var definition = await _defTool.GetInterfaceDefinition(packageId, interfaceName, version);
+            var definition = await _defTool.GetInterfaceDefinition(packageId, genericMazeInterfaceName, version);
 
-            // Assert
             Assert.NotNull(definition);
             Assert.Contains("interface", definition);
-            Assert.Contains("IMaze<", definition);  // Should be formatted as IMaze<T>, not IMaze`1
+            Assert.Contains("IMaze<", definition);
             Assert.DoesNotContain("not found in package", definition);
 
             TestOutput.WriteLine("\n========== TEST OUTPUT: IMaze INTERFACE DEFINITION ==========");
@@ -99,6 +95,45 @@ namespace NugetMcpServer.Tests.Tools
                 TestOutput.WriteLine(definition);
                 TestOutput.WriteLine("================================================================\n");
             }
+        }
+
+        [Fact]
+        public async Task GetInterfaceDefinition_WithFullName_ReturnsDefinition()
+        {
+            var packageId = "DimonSmart.MazeGenerator";
+            var fullICellInterfaceName = "DimonSmart.MazeGenerator.ICell";
+            var version = await _packageService.GetLatestVersion(packageId);
+
+            var definition = await _defTool.GetInterfaceDefinition(packageId, fullICellInterfaceName, version);
+
+            // Assert
+            Assert.NotNull(definition);
+            Assert.Contains("interface", definition);
+            Assert.Contains("ICell", definition);
+            Assert.DoesNotContain("not found in package", definition);
+
+            TestOutput.WriteLine("\n========== TEST OUTPUT: ICell INTERFACE DEFINITION (FULL NAME) ==========");
+            TestOutput.WriteLine(definition);
+            TestOutput.WriteLine("=======================================================================\n");
+        }
+
+        [Fact]
+        public async Task GetInterfaceDefinition_WithGenericFullName_ReturnsFormattedDefinition()
+        {
+            var packageId = "DimonSmart.MazeGenerator";
+            var fullGenericMazeInterfaceName = "DimonSmart.MazeGenerator.IMaze";
+            var version = await _packageService.GetLatestVersion(packageId);
+
+            var definition = await _defTool.GetInterfaceDefinition(packageId, fullGenericMazeInterfaceName, version);
+
+            Assert.NotNull(definition);
+            Assert.Contains("interface", definition);
+            Assert.Contains("IMaze<", definition);
+            Assert.DoesNotContain("not found in package", definition);
+
+            TestOutput.WriteLine("\n========== TEST OUTPUT: IMaze INTERFACE DEFINITION (FULL NAME) ==========");
+            TestOutput.WriteLine(definition);
+            TestOutput.WriteLine("======================================================================\n");
         }
     }
 }

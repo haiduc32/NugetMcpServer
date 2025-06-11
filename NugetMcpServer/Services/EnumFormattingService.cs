@@ -1,8 +1,6 @@
 using System;
 using System.Text;
 
-using NuGetMcpServer.Extensions;
-
 namespace NuGetMcpServer.Services;
 
 /// <summary>
@@ -21,15 +19,10 @@ public class EnumFormattingService
         }
 
         var sb = new StringBuilder();
-
-        // Get the underlying type
         var underlyingType = Enum.GetUnderlyingType(enumType);
-        var underlyingTypeName = FormatTypeName(underlyingType);
+        var underlyingTypeName = TypeFormattingHelpers.FormatTypeName(underlyingType);
 
-        // Format the enum declaration
         sb.Append($"public enum {enumType.Name}");
-
-        // Add underlying type if it's not int (which is the default)
         if (underlyingType != typeof(int))
         {
             sb.Append($" : {underlyingTypeName}");
@@ -37,7 +30,6 @@ public class EnumFormattingService
 
         sb.AppendLine().AppendLine("{");
 
-        // Get all enum values
         var values = Enum.GetValues(enumType);
         var names = Enum.GetNames(enumType);
         var lastIndex = names.Length - 1;
@@ -50,13 +42,11 @@ public class EnumFormattingService
 
             // Check if we need a suffix for the numeric literal based on underlying type
             var valueSuffix = underlyingType == typeof(ulong) ? "UL" :
-                                underlyingType == typeof(long) ? "L" :
-                                underlyingType == typeof(uint) ? "U" :
+                                underlyingType == typeof(long) ? "L" : underlyingType == typeof(uint) ? "U" :
                                 string.Empty;
 
             sb.Append($"    {name} = {value}{valueSuffix}");
 
-            // Add comma for all except the last item
             if (i < lastIndex)
             {
                 sb.AppendLine(",");
@@ -66,10 +56,7 @@ public class EnumFormattingService
                 sb.AppendLine();
             }
         }
-
         sb.AppendLine("}");
         return sb.ToString();
     }
-
-    private static string FormatTypeName(Type type) => type.FormatCSharpTypeName();
 }
