@@ -3,41 +3,35 @@ using Microsoft.Extensions.Logging;
 using Moq;
 
 using NuGetMcpServer.Services;
+using NuGetMcpServer.Tests.Helpers;
 using NuGetMcpServer.Tools;
+
+using Xunit;
+using Xunit.Abstractions;
 
 namespace NuGetMcpServer.Tests.Tools;
 
-public class GetEnumDefinitionToolTests
+public class GetEnumDefinitionToolTests : TestBase
 {
     private readonly Mock<ILogger<GetEnumDefinitionTool>> _loggerMock = new();
-    private readonly Mock<ILogger<NuGetPackageService>> _packageLoggerMock = new();
-    private readonly Mock<HttpClient> _httpClientMock = new();
+    private readonly Mock<ILogger<ArchiveProcessingService>> _archiveLoggerMock = new();
     private readonly NuGetPackageService _packageService;
     private readonly Mock<EnumFormattingService> _formattingServiceMock = new();
 
-    public GetEnumDefinitionToolTests()
+    public GetEnumDefinitionToolTests(ITestOutputHelper testOutput) : base(testOutput)
     {
-        _packageService = new NuGetPackageService(_packageLoggerMock.Object, _httpClientMock.Object);
+        _packageService = CreateNuGetPackageService();
     }
 
-    [Fact]
-    public async Task GetEnumDefinition_Should_ThrowArgumentNullException_When_PackageIdIsEmpty()
+    [Theory]
+    [InlineData("", "SomeEnum")]
+    [InlineData("SomePackage", "")]
+    public async Task GetEnumDefinition_InvalidArguments_ThrowsArgumentNullException(string packageId, string enumName)
     {
-        // Arrange
-        var tool = new GetEnumDefinitionTool(_loggerMock.Object, _packageService, _formattingServiceMock.Object);
+        var archiveService = new ArchiveProcessingService(_archiveLoggerMock.Object, _packageService);
+        var tool = new GetEnumDefinitionTool(_loggerMock.Object, _packageService, _formattingServiceMock.Object, archiveService);
 
-        // Act & Assert
-        await Assert.ThrowsAsync<ArgumentNullException>(() => tool.GetEnumDefinition("", "SomeEnum"));
-    }
-
-    [Fact]
-    public async Task GetEnumDefinition_Should_ThrowArgumentNullException_When_EnumNameIsEmpty()
-    {
-        // Arrange
-        var tool = new GetEnumDefinitionTool(_loggerMock.Object, _packageService, _formattingServiceMock.Object);
-
-        // Act & Assert
-        await Assert.ThrowsAsync<ArgumentNullException>(() => tool.GetEnumDefinition("SomePackage", ""));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => tool.get_enum_definition(packageId, enumName));
     }
 
     // Integration tests for enum lookup with real packages
@@ -47,12 +41,12 @@ public class GetEnumDefinitionToolTests
         var packageId = "System.ComponentModel.Annotations";
         var dataTypeEnumName = "DataType";
 
-        using var httpClient = new HttpClient();
-        var packageService = new NuGetPackageService(_packageLoggerMock.Object, httpClient);
+        var packageService = CreateNuGetPackageService();
         var formattingService = new EnumFormattingService();
-        var tool = new GetEnumDefinitionTool(_loggerMock.Object, packageService, formattingService);
+        var archiveService = new ArchiveProcessingService(_archiveLoggerMock.Object, packageService);
+        var tool = new GetEnumDefinitionTool(_loggerMock.Object, packageService, formattingService, archiveService);
 
-        var definition = await tool.GetEnumDefinition(packageId, dataTypeEnumName);
+        var definition = await tool.get_enum_definition(packageId, dataTypeEnumName);
 
         // Assert
         Assert.NotNull(definition);
@@ -67,12 +61,12 @@ public class GetEnumDefinitionToolTests
         var packageId = "System.ComponentModel.Annotations";
         var fullDataTypeEnumName = "System.ComponentModel.DataAnnotations.DataType";
 
-        using var httpClient = new HttpClient();
-        var packageService = new NuGetPackageService(_packageLoggerMock.Object, httpClient);
+        var packageService = CreateNuGetPackageService();
         var formattingService = new EnumFormattingService();
-        var tool = new GetEnumDefinitionTool(_loggerMock.Object, packageService, formattingService);
+        var archiveService = new ArchiveProcessingService(_archiveLoggerMock.Object, packageService);
+        var tool = new GetEnumDefinitionTool(_loggerMock.Object, packageService, formattingService, archiveService);
 
-        var definition = await tool.GetEnumDefinition(packageId, fullDataTypeEnumName);
+        var definition = await tool.get_enum_definition(packageId, fullDataTypeEnumName);
 
         // Assert
         Assert.NotNull(definition);

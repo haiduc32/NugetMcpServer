@@ -1,11 +1,10 @@
-using NugetMcpServer.Tests.Helpers;
-
 using NuGetMcpServer.Services;
+using NuGetMcpServer.Tests.Helpers;
 using NuGetMcpServer.Tools;
 
 using Xunit.Abstractions;
 
-namespace NugetMcpServer.Tests.Tools;
+namespace NuGetMcpServer.Tests.Tools;
 
 public class SearchPackagesToolTests : TestBase
 {
@@ -19,8 +18,9 @@ public class SearchPackagesToolTests : TestBase
         _packageLogger = new TestLogger<NuGetPackageService>(TestOutput);
         _toolLogger = new TestLogger<SearchPackagesTool>(TestOutput);
 
-        _packageService = new NuGetPackageService(_packageLogger, HttpClient);
-        _tool = new SearchPackagesTool(_toolLogger, _packageService);
+        _packageService = CreateNuGetPackageService();
+        var searchService = new PackageSearchService(new TestLogger<PackageSearchService>(TestOutput), _packageService);
+        _tool = new SearchPackagesTool(_toolLogger, searchService);
     }
 
     [Fact]
@@ -31,7 +31,7 @@ public class SearchPackagesToolTests : TestBase
         const int maxResults = 5;
 
         // Act
-        var result = await _tool.SearchPackages(query, maxResults);
+        var result = await _tool.search_packages(query, maxResults);
 
         // Assert
         Assert.NotNull(result);
@@ -41,26 +41,13 @@ public class SearchPackagesToolTests : TestBase
         Assert.True(result.Packages.Count <= maxResults * 2); // Allow for some flexibility due to multiple searches
     }
 
-    [Fact]
-    public async Task SearchPackages_WithEmptyQuery_ThrowsArgumentException()
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task SearchPackages_InvalidQuery_ThrowsArgumentException(string query)
     {
-        // Arrange
-        const string query = "";
-
-        // Act & Assert
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            _tool.SearchPackages(query));
-    }
-
-    [Fact]
-    public async Task SearchPackages_WithWhitespaceQuery_ThrowsArgumentException()
-    {
-        // Arrange
-        const string query = "   ";
-
-        // Act & Assert
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            _tool.SearchPackages(query));
+            _tool.search_packages(query));
     }
 
     [Fact]
@@ -71,7 +58,7 @@ public class SearchPackagesToolTests : TestBase
         const int maxResults = 10;
 
         // Act
-        var result = await _tool.SearchPackages(query, maxResults);
+        var result = await _tool.search_packages(query, maxResults);
 
         // Assert
         Assert.NotNull(result);
@@ -88,7 +75,7 @@ public class SearchPackagesToolTests : TestBase
         const int maxResults = 150; // Exceeds limit of 100
 
         // Act
-        var result = await _tool.SearchPackages(query, maxResults);
+        var result = await _tool.search_packages(query, maxResults);
 
         // Assert
         Assert.NotNull(result);
@@ -106,6 +93,6 @@ public class SearchPackagesToolTests : TestBase
 
         // Act & Assert
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
-            _tool.SearchPackages(query, cancellationToken: cts.Token));
+            _tool.search_packages(query, cancellationToken: cts.Token));
     }
 }

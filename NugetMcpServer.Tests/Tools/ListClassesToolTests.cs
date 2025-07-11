@@ -1,17 +1,18 @@
-using NugetMcpServer.Tests.Helpers;
-
 using NuGetMcpServer.Services;
+using NuGetMcpServer.Services.Formatters;
+using NuGetMcpServer.Tests.Helpers;
 using NuGetMcpServer.Tools;
 
 using Xunit.Abstractions;
 
-namespace NugetMcpServer.Tests.Tools;
+namespace NuGetMcpServer.Tests.Tools;
 
 public class ListClassesToolTests : TestBase
 {
     private readonly TestLogger<NuGetPackageService> _packageLogger;
     private readonly TestLogger<ListClassesTool> _listToolLogger;
     private readonly NuGetPackageService _packageService;
+    private readonly ArchiveProcessingService _archiveProcessingService;
     private readonly ListClassesTool _listTool;
 
     public ListClassesToolTests(ITestOutputHelper testOutput) : base(testOutput)
@@ -19,8 +20,9 @@ public class ListClassesToolTests : TestBase
         _packageLogger = new TestLogger<NuGetPackageService>(TestOutput);
         _listToolLogger = new TestLogger<ListClassesTool>(TestOutput);
 
-        _packageService = new NuGetPackageService(_packageLogger, HttpClient);
-        _listTool = new ListClassesTool(_listToolLogger, _packageService);
+        _packageService = CreateNuGetPackageService();
+        _archiveProcessingService = CreateArchiveProcessingService();
+        _listTool = new ListClassesTool(_listToolLogger, _packageService, _archiveProcessingService);
     }
 
     [Fact]
@@ -29,7 +31,7 @@ public class ListClassesToolTests : TestBase
         // Test with a known package
         var packageId = "DimonSmart.MazeGenerator";
 
-        var result = await _listTool.ListClasses(packageId);
+        var result = await _listTool.list_classes(packageId);
 
         Assert.NotNull(result);
         Assert.Equal(packageId, result.PackageId);
@@ -38,7 +40,7 @@ public class ListClassesToolTests : TestBase
 
         TestOutput.WriteLine($"Found {result.Classes.Count} classes in {result.PackageId} version {result.Version}");
         TestOutput.WriteLine("\n========== TEST OUTPUT: LIST OF CLASSES ==========");
-        TestOutput.WriteLine(result.ToFormattedString());
+        TestOutput.WriteLine(result.Format());
         TestOutput.WriteLine("================================================\n");
 
         // Verify we found expected classes - using Point instead of Cell as Cell doesn't exist in current version
@@ -47,11 +49,12 @@ public class ListClassesToolTests : TestBase
 
     [Fact]
     public async Task ListClasses_WithSpecificVersion_ReturnsClasses()
-    {        // Test with a known package and version
+    {
+        // Test with a known package and version
         var packageId = "DimonSmart.MazeGenerator";
         var version = await _packageService.GetLatestVersion(packageId);
 
-        var result = await _listTool.ListClasses(packageId, version);
+        var result = await _listTool.list_classes(packageId, version);
 
         // Assert
         Assert.NotNull(result);
@@ -67,7 +70,7 @@ public class ListClassesToolTests : TestBase
     {
         // Test that the result contains modifier information
         var packageId = "DimonSmart.MazeGenerator";
-        var result = await _listTool.ListClasses(packageId);
+        var result = await _listTool.list_classes(packageId);
 
         // Assert
         Assert.NotNull(result);

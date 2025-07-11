@@ -1,13 +1,12 @@
 using System.Diagnostics;
 
-using NugetMcpServer.Tests.Helpers;
-
 using NuGetMcpServer.Services;
+using NuGetMcpServer.Tests.Helpers;
 using NuGetMcpServer.Tools;
 
 using Xunit.Abstractions;
 
-namespace NugetMcpServer.Tests.Integration;
+namespace NuGetMcpServer.Tests.Integration;
 
 public class McpServerIntegrationTests(ITestOutputHelper testOutput) : TestBase(testOutput), IDisposable
 {
@@ -38,9 +37,9 @@ public class McpServerIntegrationTests(ITestOutputHelper testOutput) : TestBase(
         var serverDirectory = Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory,
             "..", "..", "..",
-            "..", "NugetMcpServer", "bin", "Debug", "net9.0", "win-x64");
+            "..", "NuGetMcpServer", "bin", "Debug", "net9.0", "win-x64");
 
-        var serverExecutablePath = Path.Combine(serverDirectory, "NugetMcpServer.exe");
+        var serverExecutablePath = Path.Combine(serverDirectory, "NuGetMcpServer.exe");
 
         // Ensure the path exists
         if (!File.Exists(serverExecutablePath))
@@ -100,15 +99,15 @@ public class McpServerIntegrationTests(ITestOutputHelper testOutput) : TestBase(
     {
         TestOutput.WriteLine("MCP server process started, testing interfaces directly...");
 
-        // Use the ListInterfacesTool class
         var packageLogger = new TestLogger<NuGetPackageService>(TestOutput);
         var toolLogger = new TestLogger<ListInterfacesTool>(TestOutput);
 
-        var packageService = new NuGetPackageService(packageLogger, HttpClient);
-        var listTool = new ListInterfacesTool(toolLogger, packageService);
+        var packageService = CreateNuGetPackageService();
+        var archiveProcessingService = CreateArchiveProcessingService();
+        var listTool = new ListInterfacesTool(toolLogger, packageService, archiveProcessingService);
 
         // Call the tool directly to verify the package contains interfaces
-        var result = await listTool.ListInterfaces("DimonSmart.MazeGenerator");
+        var result = await listTool.list_interfaces("DimonSmart.MazeGenerator");
 
         // Make sure we found interfaces
         Assert.NotNull(result);

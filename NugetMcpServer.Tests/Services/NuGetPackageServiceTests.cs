@@ -1,14 +1,13 @@
 using System.Reflection;
 
-using NugetMcpServer.Tests.Helpers;
-
 using NuGetMcpServer.Services;
+using NuGetMcpServer.Tests.Helpers;
 
 using Xunit.Abstractions;
 
 using static NuGetMcpServer.Extensions.ProgressNotifier;
 
-namespace NugetMcpServer.Tests.Services
+namespace NuGetMcpServer.Tests.Services
 {
     public class NuGetPackageServiceTests : TestBase
     {
@@ -18,7 +17,7 @@ namespace NugetMcpServer.Tests.Services
         public NuGetPackageServiceTests(ITestOutputHelper testOutput) : base(testOutput)
         {
             _packageLogger = new TestLogger<NuGetPackageService>(TestOutput);
-            _packageService = new NuGetPackageService(_packageLogger, HttpClient);
+            _packageService = CreateNuGetPackageService();
         }
 
         [Fact]
@@ -85,7 +84,7 @@ namespace NugetMcpServer.Tests.Services
 
             foreach (var package in results)
             {
-                Assert.NotEmpty(package.Id);
+                Assert.NotEmpty(package.PackageId);
                 Assert.NotEmpty(package.Version);
                 Assert.True(package.DownloadCount >= 0);
             }
@@ -93,7 +92,7 @@ namespace NugetMcpServer.Tests.Services
             TestOutput.WriteLine($"Found {results.Count} packages for query '{query}':");
             foreach (var package in results.Take(3))
             {
-                TestOutput.WriteLine($"- {package.Id} v{package.Version} ({package.DownloadCount:N0} downloads)");
+                TestOutput.WriteLine($"- {package.PackageId} v{package.Version} ({package.DownloadCount:N0} downloads)");
             }
         }
 

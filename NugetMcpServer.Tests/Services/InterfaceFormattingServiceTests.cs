@@ -1,13 +1,12 @@
 using System.Collections;
 using System.Reflection;
 
-using NugetMcpServer.Tests.Helpers;
-
 using NuGetMcpServer.Services;
+using NuGetMcpServer.Tests.Helpers;
 
 using Xunit.Abstractions;
 
-namespace NugetMcpServer.Tests.Services;
+namespace NuGetMcpServer.Tests.Services;
 
 public class InterfaceFormattingServiceTests : TestBase
 {
@@ -18,11 +17,12 @@ public class InterfaceFormattingServiceTests : TestBase
     {
         var interfaceType = typeof(IDisposable);
         var assemblyName = "System.Private.CoreLib";
+        var packageName = "TestPackage";
 
-        var formattedCode = _formattingService.FormatInterfaceDefinition(interfaceType, assemblyName);
+        var formattedCode = _formattingService.FormatInterfaceDefinition(interfaceType, assemblyName, packageName);
 
         Assert.NotNull(formattedCode);
-        Assert.Contains($"/* C# INTERFACE FROM {assemblyName} */", formattedCode);
+        Assert.Contains($"/* C# INTERFACE FROM {assemblyName} (Package: {packageName}) */", formattedCode);
         Assert.Contains("public interface IDisposable", formattedCode);
         Assert.Contains("void Dispose()", formattedCode);
 
@@ -41,15 +41,16 @@ public class InterfaceFormattingServiceTests : TestBase
     {
         var interfaceType = typeof(IMockGeneric<string>);
         var assemblyName = Assembly.GetExecutingAssembly().GetName().Name!;
+        var packageName = "TestPackage";
 
-        var formattedCode = _formattingService.FormatInterfaceDefinition(interfaceType, assemblyName);
+        var formattedCode = _formattingService.FormatInterfaceDefinition(interfaceType, assemblyName, packageName);
 
         TestOutput.WriteLine("\n========== TEST OUTPUT: FORMATTED GENERIC INTERFACE ==========");
         TestOutput.WriteLine(formattedCode);
         TestOutput.WriteLine("===========================================================\n");
 
         Assert.NotNull(formattedCode);
-        Assert.Contains($"/* C# INTERFACE FROM {assemblyName} */", formattedCode);
+        Assert.Contains($"/* C# INTERFACE FROM {assemblyName} (Package: {packageName}) */", formattedCode);
         Assert.Contains("public interface IMockGeneric<string>", formattedCode);
         Assert.Contains("string GetValue()", formattedCode);
         Assert.Contains("void SetValue(string value)", formattedCode);
@@ -60,8 +61,9 @@ public class InterfaceFormattingServiceTests : TestBase
     {
         var interfaceType = typeof(IMockGeneric<int>);
         var assemblyName = Assembly.GetExecutingAssembly().GetName().Name!;
+        var packageName = "TestPackage";
 
-        var formattedCode = _formattingService.FormatInterfaceDefinition(interfaceType, assemblyName);
+        var formattedCode = _formattingService.FormatInterfaceDefinition(interfaceType, assemblyName, packageName);
 
         TestOutput.WriteLine("\n========== TEST OUTPUT: INT GENERIC INTERFACE ==========");
         TestOutput.WriteLine(formattedCode);
@@ -78,11 +80,12 @@ public class InterfaceFormattingServiceTests : TestBase
     {
         var interfaceType = typeof(ICollection);
         var assemblyName = "System.Private.CoreLib";
+        var packageName = "TestPackage";
 
-        var formattedCode = _formattingService.FormatInterfaceDefinition(interfaceType, assemblyName);
+        var formattedCode = _formattingService.FormatInterfaceDefinition(interfaceType, assemblyName, packageName);
 
         Assert.NotNull(formattedCode);
-        Assert.Contains($"/* C# INTERFACE FROM {assemblyName} */", formattedCode);
+        Assert.Contains($"/* C# INTERFACE FROM {assemblyName} (Package: {packageName}) */", formattedCode);
         Assert.Contains("public interface ICollection", formattedCode);
         Assert.Contains("int Count { get; }", formattedCode);
 
@@ -96,11 +99,12 @@ public class InterfaceFormattingServiceTests : TestBase
     {
         var interfaceType = typeof(IDisposable);
         var assemblyName = "System.Private.CoreLib";
+        var packageName = "TestPackage";
 
-        var formattedCode = _formattingService.FormatInterfaceDefinition(interfaceType, assemblyName);
+        var formattedCode = _formattingService.FormatInterfaceDefinition(interfaceType, assemblyName, packageName);
 
         Assert.NotNull(formattedCode);
-        Assert.Contains($"/* C# INTERFACE FROM {assemblyName} */", formattedCode);
+        Assert.Contains($"/* C# INTERFACE FROM {assemblyName} (Package: {packageName}) */", formattedCode);
         Assert.Contains("public interface IDisposable", formattedCode);
         Assert.Contains("void Dispose()", formattedCode);
 

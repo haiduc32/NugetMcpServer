@@ -1,11 +1,10 @@
-using NugetMcpServer.Tests.Helpers;
-
 using NuGetMcpServer.Services;
+using NuGetMcpServer.Tests.Helpers;
 using NuGetMcpServer.Tools;
 
 using Xunit.Abstractions;
 
-namespace NugetMcpServer.Tests.Tools
+namespace NuGetMcpServer.Tests.Tools
 {
     public class GetInterfaceDefinitionToolTests : TestBase
     {
@@ -20,9 +19,10 @@ namespace NugetMcpServer.Tests.Tools
             _packageLogger = new TestLogger<NuGetPackageService>(TestOutput);
             _defToolLogger = new TestLogger<GetInterfaceDefinitionTool>(TestOutput);
 
-            _packageService = new NuGetPackageService(_packageLogger, HttpClient);
+            _packageService = CreateNuGetPackageService();
             _formattingService = new InterfaceFormattingService();
-            _defTool = new GetInterfaceDefinitionTool(_defToolLogger, _packageService, _formattingService);
+            var archiveService = new ArchiveProcessingService(new TestLogger<ArchiveProcessingService>(TestOutput), _packageService);
+            _defTool = new GetInterfaceDefinitionTool(_defToolLogger, _packageService, _formattingService, archiveService);
         }
 
         [Fact]
@@ -33,7 +33,7 @@ namespace NugetMcpServer.Tests.Tools
             var interfaceName = "ICell";
             var version = await _packageService.GetLatestVersion(packageId);
 
-            var definition = await _defTool.GetInterfaceDefinition(packageId, interfaceName, version);
+            var definition = await _defTool.get_interface_definition(packageId, interfaceName, version);
 
             // Assert
             Assert.NotNull(definition);
@@ -52,7 +52,7 @@ namespace NugetMcpServer.Tests.Tools
             var genericMazeInterfaceName = "IMaze";
             var version = await _packageService.GetLatestVersion(packageId);
 
-            var definition = await _defTool.GetInterfaceDefinition(packageId, genericMazeInterfaceName, version);
+            var definition = await _defTool.get_interface_definition(packageId, genericMazeInterfaceName, version);
 
             Assert.NotNull(definition);
             Assert.Contains("interface", definition);
@@ -69,12 +69,13 @@ namespace NugetMcpServer.Tests.Tools
         {
             // This test verifies that both tools can work together on the same package
             var listToolLogger = new TestLogger<ListInterfacesTool>(TestOutput);
-            var listTool = new ListInterfacesTool(listToolLogger, _packageService);
+            var archiveProcessingService = CreateArchiveProcessingService();
+            var listTool = new ListInterfacesTool(listToolLogger, _packageService, archiveProcessingService);
 
             var packageId = "DimonSmart.MazeGenerator";
 
             // Step 1: List interfaces in the package
-            var result = await listTool.ListInterfaces(packageId);
+            var result = await listTool.list_interfaces(packageId);
             Assert.NotNull(result);
             Assert.NotEmpty(result.Interfaces);
 
@@ -82,7 +83,7 @@ namespace NugetMcpServer.Tests.Tools
             var mazeInterface = result.Interfaces.FirstOrDefault(i => i.Name.StartsWith("IMaze"));
             if (mazeInterface != null)
             {
-                var definition = await _defTool.GetInterfaceDefinition(
+                var definition = await _defTool.get_interface_definition(
                     packageId,
                     mazeInterface.Name,
                     result.Version);
@@ -104,7 +105,7 @@ namespace NugetMcpServer.Tests.Tools
             var fullICellInterfaceName = "DimonSmart.MazeGenerator.ICell";
             var version = await _packageService.GetLatestVersion(packageId);
 
-            var definition = await _defTool.GetInterfaceDefinition(packageId, fullICellInterfaceName, version);
+            var definition = await _defTool.get_interface_definition(packageId, fullICellInterfaceName, version);
 
             // Assert
             Assert.NotNull(definition);
@@ -124,7 +125,7 @@ namespace NugetMcpServer.Tests.Tools
             var fullGenericMazeInterfaceName = "DimonSmart.MazeGenerator.IMaze";
             var version = await _packageService.GetLatestVersion(packageId);
 
-            var definition = await _defTool.GetInterfaceDefinition(packageId, fullGenericMazeInterfaceName, version);
+            var definition = await _defTool.get_interface_definition(packageId, fullGenericMazeInterfaceName, version);
 
             Assert.NotNull(definition);
             Assert.Contains("interface", definition);

@@ -3,14 +3,13 @@ using System.Collections.Generic;
 
 using ModelContextProtocol;
 
-using NugetMcpServer.Tests.Helpers;
-
 using NuGetMcpServer.Extensions;
+using NuGetMcpServer.Tests.Helpers;
 
 using Xunit;
 using Xunit.Abstractions;
 
-namespace NugetMcpServer.Tests.Extensions;
+namespace NuGetMcpServer.Tests.Extensions;
 
 public class ProgressNotifierTests : TestBase
 {

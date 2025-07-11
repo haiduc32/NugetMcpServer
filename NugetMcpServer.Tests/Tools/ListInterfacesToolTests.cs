@@ -1,17 +1,18 @@
-using NugetMcpServer.Tests.Helpers;
-
 using NuGetMcpServer.Services;
+using NuGetMcpServer.Services.Formatters;
+using NuGetMcpServer.Tests.Helpers;
 using NuGetMcpServer.Tools;
 
 using Xunit.Abstractions;
 
-namespace NugetMcpServer.Tests.Tools
+namespace NuGetMcpServer.Tests.Tools
 {
     public class ListInterfacesToolTests : TestBase
     {
         private readonly TestLogger<NuGetPackageService> _packageLogger;
         private readonly TestLogger<ListInterfacesTool> _listToolLogger;
         private readonly NuGetPackageService _packageService;
+        private readonly ArchiveProcessingService _archiveProcessingService;
         private readonly ListInterfacesTool _listTool;
 
         public ListInterfacesToolTests(ITestOutputHelper testOutput) : base(testOutput)
@@ -19,8 +20,9 @@ namespace NugetMcpServer.Tests.Tools
             _packageLogger = new TestLogger<NuGetPackageService>(TestOutput);
             _listToolLogger = new TestLogger<ListInterfacesTool>(TestOutput);
 
-            _packageService = new NuGetPackageService(_packageLogger, HttpClient);
-            _listTool = new ListInterfacesTool(_listToolLogger, _packageService);
+            _packageService = CreateNuGetPackageService();
+            _archiveProcessingService = CreateArchiveProcessingService();
+            _listTool = new ListInterfacesTool(_listToolLogger, _packageService, _archiveProcessingService);
         }
 
         [Fact]
@@ -29,7 +31,7 @@ namespace NugetMcpServer.Tests.Tools
             // Test with a known package
             var packageId = "DimonSmart.MazeGenerator";
 
-            var result = await _listTool.ListInterfaces(packageId);
+            var result = await _listTool.list_interfaces(packageId);
 
             // Assert
             Assert.NotNull(result);
@@ -39,7 +41,7 @@ namespace NugetMcpServer.Tests.Tools
 
             TestOutput.WriteLine($"Found {result.Interfaces.Count} interfaces in {result.PackageId} version {result.Version}");
             TestOutput.WriteLine("\n========== TEST OUTPUT: LIST OF INTERFACES ==========");
-            TestOutput.WriteLine(result.ToFormattedString());
+            TestOutput.WriteLine(result.Format());
             TestOutput.WriteLine("===================================================\n");
 
             // Verify we found expected interfaces
@@ -53,7 +55,7 @@ namespace NugetMcpServer.Tests.Tools
             var packageId = "DimonSmart.MazeGenerator";
             var version = await _packageService.GetLatestVersion(packageId);
 
-            var result = await _listTool.ListInterfaces(packageId, version);
+            var result = await _listTool.list_interfaces(packageId, version);
 
             // Assert
             Assert.NotNull(result);

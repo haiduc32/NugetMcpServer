@@ -1,7 +1,5 @@
 using System;
 using System.ComponentModel;
-using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -9,6 +7,8 @@ using Microsoft.Extensions.Logging;
 
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
+
+using NuGet.Packaging;
 
 using NuGetMcpServer.Common;
 using NuGetMcpServer.Extensions;
@@ -22,11 +22,12 @@ namespace NuGetMcpServer.Tools;
 public class GetEnumDefinitionTool(
     ILogger<GetEnumDefinitionTool> logger,
     NuGetPackageService packageService,
-    EnumFormattingService formattingService) : McpToolBase<GetEnumDefinitionTool>(logger, packageService)
+    EnumFormattingService formattingService,
+    ArchiveProcessingService archiveService) : McpToolBase<GetEnumDefinitionTool>(logger, packageService)
 {
     [McpServerTool]
     [Description("Extracts and returns the C# enum definition from a specified NuGet package.")]
-    public Task<string> GetEnumDefinition(
+    public Task<string> get_enum_definition(
         [Description("NuGet package ID")] string packageId,
         [Description("Enum name (short name like 'DayOfWeek' or full name like 'System.DayOfWeek')")] string enumName,
         [Description("Package version (optional, defaults to latest)")] string? version = null,
@@ -61,47 +62,44 @@ public class GetEnumDefinitionTool(
             version = await PackageService.GetLatestVersion(packageId);
         }
 
-        packageId = packageId ?? string.Empty;
-        version = version ?? string.Empty;
-
-        Logger.LogInformation("Fetching enum {EnumName} from package {PackageId} version {Version}", enumName, packageId, version);
+        Logger.LogInformation("Fetching enum {EnumName} from package {PackageId} version {Version}", enumName, packageId, version!);
 
         progress.ReportMessage($"Downloading package {packageId} v{version}");
 
-        using var packageStream = await PackageService.DownloadPackageAsync(packageId, version, progress);
+        using var packageStream = await PackageService.DownloadPackageAsync(packageId, version!, progress);
+
+        progress.ReportMessage("Extracting package information");
+        var packageInfo = PackageService.GetPackageInfoAsync(packageStream, packageId, version!);
+
+        var metaPackageWarning = MetaPackageHelper.CreateMetaPackageWarning(packageInfo, packageId, version!);
 
         progress.ReportMessage("Scanning assemblies for enum");
 
-        using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read);
-        foreach (var entry in archive.Entries)
-        {
-            if (!entry.FullName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
+        using var packageReader = new PackageArchiveReader(packageStream, leaveStreamOpen: true);
+        var dllFiles = ArchiveProcessingService.GetUniqueAssemblyFiles(packageReader);
 
-            var definition = await TryGetEnumFromEntry(entry, enumName);
-            if (definition != null)
+        foreach (var filePath in dllFiles)
+        {
+            var assemblyInfo = await archiveService.LoadAssemblyFromPackageFileAsync(packageReader, filePath);
+            if (assemblyInfo != null)
             {
-                progress.ReportMessage($"Enum found: {enumName}");
-                return definition;
+                var definition = TryGetEnumFromAssembly(assemblyInfo, enumName, packageId);
+                if (definition != null)
+                {
+                    progress.ReportMessage($"Enum found: {enumName}");
+                    return metaPackageWarning + definition;
+                }
             }
         }
 
-        return $"Enum '{enumName}' not found in package {packageId}.";
+        return metaPackageWarning + $"Enum '{enumName}' not found in package {packageId}.";
     }
 
-    private async Task<string?> TryGetEnumFromEntry(ZipArchiveEntry entry, string enumName)
+    private string? TryGetEnumFromAssembly(LoadedAssemblyInfo assemblyInfo, string enumName, string packageId)
     {
         try
         {
-            var assembly = await LoadAssemblyFromEntryAsync(entry);
-
-            if (assembly == null)
-            {
-                return null;
-            }
-            var enumType = assembly.GetTypes()
+            var enumType = assemblyInfo.Types
                 .FirstOrDefault(t => t.IsEnum && (t.Name == enumName || t.FullName == enumName));
 
             if (enumType == null)
@@ -109,12 +107,11 @@ public class GetEnumDefinitionTool(
                 return null;
             }
 
-            var assemblyName = Path.GetFileName(entry.FullName);
-            return $"/* C# ENUM FROM {assemblyName} */\r\n" + formattingService.FormatEnumDefinition(enumType);
+            return formattingService.FormatEnumDefinition(enumType, assemblyInfo.AssemblyName, packageId);
         }
         catch (Exception ex)
         {
-            Logger.LogDebug(ex, "Error processing archive entry {EntryName}", entry.FullName);
+            Logger.LogDebug(ex, "Error processing assembly {AssemblyName}", assemblyInfo.AssemblyName);
             return null;
         }
     }

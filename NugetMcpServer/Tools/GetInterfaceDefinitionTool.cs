@@ -1,7 +1,5 @@
 using System;
 using System.ComponentModel;
-using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -9,6 +7,8 @@ using Microsoft.Extensions.Logging;
 
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
+
+using NuGet.Packaging;
 
 using NuGetMcpServer.Common;
 using NuGetMcpServer.Extensions;
@@ -22,11 +22,12 @@ namespace NuGetMcpServer.Tools;
 public class GetInterfaceDefinitionTool(
     ILogger<GetInterfaceDefinitionTool> logger,
     NuGetPackageService packageService,
-    InterfaceFormattingService formattingService) : McpToolBase<GetInterfaceDefinitionTool>(logger, packageService)
+    InterfaceFormattingService formattingService,
+    ArchiveProcessingService archiveService) : McpToolBase<GetInterfaceDefinitionTool>(logger, packageService)
 {
     [McpServerTool]
     [Description("Extracts and returns the C# interface definition from a specified NuGet package.")]
-    public Task<string> GetInterfaceDefinition(
+    public Task<string> get_interface_definition(
         [Description("NuGet package ID")] string packageId,
         [Description("Interface name (short name like 'IDisposable' or full name like 'System.IDisposable')")] string interfaceName,
         [Description("Package version (optional, defaults to latest)")] string? version = null,
@@ -38,7 +39,6 @@ public class GetInterfaceDefinitionTool(
             Logger,
             "Error fetching interface definition");
     }
-
 
     private async Task<string> GetInterfaceDefinitionCore(
         string packageId,
@@ -63,109 +63,92 @@ public class GetInterfaceDefinitionTool(
             version = await PackageService.GetLatestVersion(packageId);
         }
 
-        packageId = packageId ?? string.Empty;
-        version = version ?? string.Empty;
-
         Logger.LogInformation("Fetching interface {InterfaceName} from package {PackageId} version {Version}",
-            interfaceName, packageId, version);
+            interfaceName, packageId, version!);
 
         progress.ReportMessage($"Downloading package {packageId} v{version}");
 
-        using var packageStream = await PackageService.DownloadPackageAsync(packageId, version, progress);
+        using var packageStream = await PackageService.DownloadPackageAsync(packageId, version!, progress);
+
+        progress.ReportMessage("Extracting package information");
+        var packageInfo = PackageService.GetPackageInfoAsync(packageStream, packageId, version!);
+
+        var metaPackageWarning = MetaPackageHelper.CreateMetaPackageWarning(packageInfo, packageId, version!);
 
         progress.ReportMessage("Scanning assemblies for interface");
 
-        using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read);
-        var dllEntries = archive.Entries.Where(e => e.FullName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)).ToList();
-        var processedDlls = 0;
+        using var packageReader = new PackageArchiveReader(packageStream, leaveStreamOpen: true);
+        var dllFiles = ArchiveProcessingService.GetUniqueAssemblyFiles(packageReader);
 
-        foreach (var entry in dllEntries)
+        foreach (var filePath in dllFiles)
         {
-            progress.ReportMessage($"Scanning {Path.GetFileName(entry.FullName)}: {entry.FullName}");
+            progress.ReportMessage($"Scanning {System.IO.Path.GetFileName(filePath)}: {filePath}");
 
-            var definition = await TryGetInterfaceFromEntry(entry, interfaceName);
-            if (definition != null)
+            var assemblyInfo = await archiveService.LoadAssemblyFromPackageFileAsync(packageReader, filePath);
+            if (assemblyInfo != null)
             {
-                progress.ReportMessage($"Interface found: {interfaceName}");
-                return definition;
-            }
-            processedDlls++;
-        }
-
-        return $"Interface '{interfaceName}' not found in package {packageId}.";
-    }
-    private async Task<string?> TryGetInterfaceFromEntry(ZipArchiveEntry entry, string interfaceName)
-    {
-        try
-        {
-            var assembly = await LoadAssemblyFromEntryAsync(entry);
-            if (assembly == null)
-            {
-                return null;
-            }
-            var iface = assembly.GetTypes()
-                .FirstOrDefault(t =>
+                try
                 {
-                    if (!t.IsInterface)
-                    {
-                        return false;
-                    }
-
-                    // Exact match for short name
-                    if (t.Name == interfaceName)
-                    {
-                        return true;
-                    }
-
-                    // Exact match for full name
-                    if (t.FullName == interfaceName)
-                    {
-                        return true;
-                    }
-
-                    // For generic types, compare the name part before the backtick
-                    if (!t.IsGenericType)
-                    {
-                        return false;
-                    }
-
-                    {
-                        var backtickIndex = t.Name.IndexOf('`');
-                        if (backtickIndex > 0)
+                    var iface = assemblyInfo.Types
+                        .FirstOrDefault(t =>
                         {
-                            var baseName = t.Name.Substring(0, backtickIndex);
-                            if (baseName == interfaceName)
+                            if (!t.IsInterface)
+                            {
+                                return false;
+                            }
+
+                            if (t.Name == interfaceName)
                             {
                                 return true;
                             }
-                        }
 
-                        // Also check full name for generics
-                        if (t.FullName != null)
-                        {
-                            var fullBacktickIndex = t.FullName.IndexOf('`');
-                            if (fullBacktickIndex > 0)
+                            if (t.FullName == interfaceName)
                             {
-                                var fullBaseName = t.FullName.Substring(0, fullBacktickIndex);
-                                return fullBaseName == interfaceName;
+                                return true;
                             }
-                        }
+
+                            if (!t.IsGenericType)
+                            {
+                                return false;
+                            }
+
+                            var backtickIndex = t.Name.IndexOf('`');
+                            if (backtickIndex > 0)
+                            {
+                                var baseName = t.Name.Substring(0, backtickIndex);
+                                if (baseName == interfaceName)
+                                {
+                                    return true;
+                                }
+                            }
+
+                            if (t.FullName != null)
+                            {
+                                var fullBacktickIndex = t.FullName.IndexOf('`');
+                                if (fullBacktickIndex > 0)
+                                {
+                                    var fullBaseName = t.FullName.Substring(0, fullBacktickIndex);
+                                    return fullBaseName == interfaceName;
+                                }
+                            }
+
+                            return false;
+                        });
+
+                    if (iface != null)
+                    {
+                        progress.ReportMessage($"Interface found: {interfaceName}");
+                        var formatted = formattingService.FormatInterfaceDefinition(iface, assemblyInfo.AssemblyName, packageId);
+                        return metaPackageWarning + formatted;
                     }
-
-                    return false;
-                });
-
-            if (iface == null)
-            {
-                return null;
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogDebug(ex, "Error processing assembly {AssemblyName}", assemblyInfo.AssemblyName);
+                }
             }
+        }
 
-            return formattingService.FormatInterfaceDefinition(iface, Path.GetFileName(entry.FullName));
-        }
-        catch (Exception ex)
-        {
-            Logger.LogDebug(ex, "Error processing archive entry {EntryName}", entry.FullName);
-            return null;
-        }
+        return metaPackageWarning + $"Interface '{interfaceName}' not found in package {packageId}.";
     }
 }

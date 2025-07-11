@@ -1,7 +1,5 @@
 using System;
 using System.ComponentModel;
-using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -9,6 +7,8 @@ using Microsoft.Extensions.Logging;
 
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
+
+using NuGet.Packaging;
 
 using NuGetMcpServer.Common;
 using NuGetMcpServer.Extensions;
@@ -22,11 +22,12 @@ namespace NuGetMcpServer.Tools;
 public class GetClassDefinitionTool(
     ILogger<GetClassDefinitionTool> logger,
     NuGetPackageService packageService,
-    ClassFormattingService formattingService) : McpToolBase<GetClassDefinitionTool>(logger, packageService)
+    ClassFormattingService formattingService,
+    ArchiveProcessingService archiveService) : McpToolBase<GetClassDefinitionTool>(logger, packageService)
 {
     [McpServerTool]
     [Description("Extracts and returns the C# class definition from a specified NuGet package.")]
-    public Task<string> GetClassDefinition(
+    public Task<string> get_class_definition(
         [Description("NuGet package ID")] string packageId,
         [Description("Class name (short name like 'String' or full name like 'System.String')")] string className,
         [Description("Package version (optional, defaults to latest)")] string? version = null,
@@ -62,110 +63,92 @@ public class GetClassDefinitionTool(
             version = await PackageService.GetLatestVersion(packageId);
         }
 
-        packageId = packageId ?? string.Empty;
-        version = version ?? string.Empty;
-
         Logger.LogInformation("Fetching class {ClassName} from package {PackageId} version {Version}",
-            className, packageId, version);
+            className, packageId, version!);
 
         progress.ReportMessage($"Downloading package {packageId} v{version}");
 
-        using var packageStream = await PackageService.DownloadPackageAsync(packageId, version, progress);
+        using var packageStream = await PackageService.DownloadPackageAsync(packageId, version!, progress);
+
+        progress.ReportMessage("Extracting package information");
+        var packageInfo = PackageService.GetPackageInfoAsync(packageStream, packageId, version!);
+
+        var metaPackageWarning = MetaPackageHelper.CreateMetaPackageWarning(packageInfo, packageId, version!);
 
         progress.ReportMessage("Scanning assemblies for class");
 
-        using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read);
-        foreach (var entry in archive.Entries)
+        using var packageReader = new PackageArchiveReader(packageStream, leaveStreamOpen: true);
+
+        var dllFiles = ArchiveProcessingService.GetUniqueAssemblyFiles(packageReader);
+
+        foreach (var filePath in dllFiles)
         {
-            if (!entry.FullName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            var assemblyInfo = await archiveService.LoadAssemblyFromPackageFileAsync(packageReader, filePath);
+            if (assemblyInfo != null)
             {
-                continue;
-            }
-
-            var definition = await TryGetClassFromEntry(entry, className);
-            if (definition != null)
-            {
-                progress.ReportMessage($"Class found: {className}");
-                return definition;
-            }
-        }
-
-        return $"Class '{className}' not found in package {packageId}.";
-    }
-
-    private async Task<string?> TryGetClassFromEntry(ZipArchiveEntry entry, string className)
-    {
-        try
-        {
-            var assembly = await LoadAssemblyFromEntryAsync(entry);
-            if (assembly == null)
-            {
-                return null;
-            }
-
-            var classType = assembly.GetTypes()
-                .FirstOrDefault(t =>
+                try
                 {
-                    if (!t.IsClass || !t.IsPublic)
-                    {
-                        return false;
-                    }
-
-                    // Exact match for short name
-                    if (t.Name == className)
-                    {
-                        return true;
-                    }
-
-                    // Exact match for full name
-                    if (t.FullName == className)
-                    {
-                        return true;
-                    }
-
-                    // For generic types, compare the name part before the backtick
-                    if (!t.IsGenericType)
-                    {
-                        return false;
-                    }
-
-                    {
-                        var backtickIndex = t.Name.IndexOf('`');
-                        if (backtickIndex > 0)
+                    var classType = assemblyInfo.Types
+                        .FirstOrDefault(t =>
                         {
-                            var baseName = t.Name.Substring(0, backtickIndex);
-                            if (baseName == className)
+                            if (!t.IsClass || !t.IsPublic)
+                            {
+                                return false;
+                            }
+
+                            if (t.Name == className)
                             {
                                 return true;
                             }
-                        }
 
-                        // Also check full name for generics
-                        if (t.FullName != null)
-                        {
-                            var fullBacktickIndex = t.FullName.IndexOf('`');
-                            if (fullBacktickIndex > 0)
+                            if (t.FullName == className)
                             {
-                                var fullBaseName = t.FullName.Substring(0, fullBacktickIndex);
-                                return fullBaseName == className;
+                                return true;
                             }
-                        }
+
+                            if (!t.IsGenericType)
+                            {
+                                return false;
+                            }
+
+                            var backtickIndex = t.Name.IndexOf('`');
+                            if (backtickIndex > 0)
+                            {
+                                var baseName = t.Name.Substring(0, backtickIndex);
+                                if (baseName == className)
+                                {
+                                    return true;
+                                }
+                            }
+
+                            if (t.FullName != null)
+                            {
+                                var fullBacktickIndex = t.FullName.IndexOf('`');
+                                if (fullBacktickIndex > 0)
+                                {
+                                    var fullBaseName = t.FullName.Substring(0, fullBacktickIndex);
+                                    return fullBaseName == className;
+                                }
+                            }
+
+                            return false;
+                        });
+
+                    if (classType != null)
+                    {
+                        progress.ReportMessage($"Class found: {className}");
+                        var formatted = formattingService.FormatClassDefinition(classType, assemblyInfo.AssemblyName, packageId);
+                        return metaPackageWarning + formatted;
                     }
-
-                    return false;
-                });
-
-            if (classType == null)
-            {
-                return null;
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogDebug(ex, "Error processing assembly {AssemblyName}", assemblyInfo.AssemblyName);
+                }
             }
+        }
 
-            return formattingService.FormatClassDefinition(classType, Path.GetFileName(entry.FullName));
-        }
-        catch (Exception ex)
-        {
-            Logger.LogDebug(ex, "Error processing archive entry {EntryName}", entry.FullName);
-            return null;
-        }
+        return metaPackageWarning + $"Class '{className}' not found in package {packageId}.";
     }
+
 }

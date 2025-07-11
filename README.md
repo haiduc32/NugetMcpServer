@@ -1,4 +1,3 @@
-
 # NugetMcpServer
 
 A powerful MCP server for getting accurate interface and enum definitions from NuGet packages. It helps reduce LLM hallucinations by giving precise information about real package APIs.
@@ -95,28 +94,40 @@ The server uses the .NET Generic Host and includes:
 
 ### TimeTool
 
-- `GetCurrentTime()` - Returns the current server time in ISO 8601 format (YYYY-MM-DDThh:mm:ssZ)
+- `get_current_time()` - Returns the current server time in ISO 8601 format (YYYY-MM-DDThh:mm:ssZ)
 
 
 ### Interface Tools
 
-- `GetInterfaceDefinition(packageId, interfaceName?, version?)` - Gets the C# interface definition from a NuGet package. Parameters: packageId (NuGet package ID), interfaceName (optional, short name without namespace), version (optional, defaults to latest)
-- `ListInterfaces(packageId, version?)` - Lists all public interfaces in a NuGet package. Returns package ID, version, and the list of interfaces
+- `get_interface_definition(packageId, interfaceName?, version?)` - Gets the C# interface definition from a NuGet package. Parameters: packageId (NuGet package ID), interfaceName (optional, short name without namespace), version (optional, defaults to latest)
+- `list_interfaces(packageId, version?)` - Lists all public interfaces in a NuGet package. Returns package ID, version, and the list of interfaces
 
 
 ### Enum Tools
 
-- `GetEnumDefinition(packageId, enumName, version?)` - Gets the C# enum definition from a NuGet package. Parameters: packageId (NuGet package ID), enumName (short name without namespace), version (optional, defaults to latest)
+- `get_enum_definition(packageId, enumName, version?)` - Gets the C# enum definition from a NuGet package. Parameters: packageId (NuGet package ID), enumName (short name without namespace), version (optional, defaults to latest)
+
+### Class Tools
+
+- `get_class_definition(packageId, className, version?)` - Gets the C# class definition from a NuGet package. Parameters: packageId (NuGet package ID), className (short or full name), version (optional, defaults to latest)
+- `list_classes(packageId, version?)` - Lists all public classes in a NuGet package. Returns package ID, version, and the list of classes
 
 ### Package Search Tools
 
-- `SearchPackages(query, maxResults?, fuzzySearch?)` - Searches for NuGet packages by description or functionality.
+- `search_packages(query, maxResults?, fuzzySearch?)` - Searches for NuGet packages by description or functionality.
   - **Standard search mode (fuzzySearch=false, default)**: Performs direct search for the full query and also searches each comma-separated keyword if provided
   - **Fuzzy search mode (fuzzySearch=true)**: Starts with the standard search and additionally tries each individual word and AI-generated package name alternatives
   - AI analyzes user's functional requirements and generates 3 most likely package names (e.g., "maze generation" → "MazeGenerator MazeBuilder MazeCreator")
   - Returns up to 50 most popular packages with details including download counts, descriptions, and project URLs
   - Results are sorted by popularity (download count) for better relevance
 
+### Package Information Tools
+
+- `get_package_info(packageId, version?)` - Gets comprehensive information about a NuGet package including metadata, dependencies, and meta-package status. Shows clear warnings for meta-packages and guidance on where to find actual implementations.
+
+### Package Dependencies
+
+- `get_package_dependencies(packageId, version?)` - Gets the dependencies of a NuGet package to help understand what other packages contain the actual implementations
 
 ## MCP Server Response Examples
 
@@ -302,5 +313,13 @@ Model Context Protocol (MCP) is a protocol that standardizes communication betwe
 ## License
 
 Unlicense - This is free and unencumbered software released into the public domain.
+
+### Meta-Package Support
+
+All tools that analyze package content (class definitions, interface definitions, enum definitions, and listing tools) now automatically detect meta-packages and show clear warnings. Meta-packages are NuGet packages that group other packages together without containing actual implementation code. When a meta-package is detected, the tools will:
+
+- Display a prominent warning that it's a meta-package
+- List the dependencies that contain the actual implementations
+- Provide guidance on which packages to analyze instead
 
 

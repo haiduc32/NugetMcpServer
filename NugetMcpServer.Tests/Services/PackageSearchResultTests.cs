@@ -1,15 +1,16 @@
 using NuGetMcpServer.Services;
+using NuGetMcpServer.Services.Formatters;
 
-namespace NugetMcpServer.Tests.Services;
+namespace NuGetMcpServer.Tests.Services;
 
 public class PackageSearchResultTests
 {
     [Fact]
-    public void ToFormattedString_IncludesFoundByKeywords()
+    public void Format_IncludesFoundByKeywords()
     {
         var package1 = new PackageInfo
         {
-            Id = "TestPackage1",
+            PackageId = "TestPackage1",
             Version = "1.0.0",
             Description = "Test package description",
             DownloadCount = 1000,
@@ -18,7 +19,7 @@ public class PackageSearchResultTests
 
         var package2 = new PackageInfo
         {
-            Id = "TestPackage2",
+            PackageId = "TestPackage2",
             Version = "2.0.0",
             DownloadCount = 500,
             FoundByKeywords = ["example"]
@@ -29,9 +30,9 @@ public class PackageSearchResultTests
             Packages = [package1, package2]
         };
 
-        var formatted = result.ToFormattedString();
+        var formatted = result.Format();
 
-        Assert.Contains("NUGET PACKAGE SEARCH RESULTS FOR: test query", formatted);
+        Assert.Contains("NuGet PACKAGE SEARCH RESULTS FOR: test query", formatted);
         Assert.Contains("TestPackage1 v1.0.0", formatted);
         Assert.Contains("**Found by keywords**: test, sample", formatted);
         Assert.Contains("TestPackage2 v2.0.0", formatted);
@@ -40,11 +41,11 @@ public class PackageSearchResultTests
     }
 
     [Fact]
-    public void ToFormattedString_OrdersByDownloadCount()
+    public void Format_OrdersByDownloadCount()
     {
         var package1 = new PackageInfo
         {
-            Id = "LessPopular",
+            PackageId = "LessPopular",
             Version = "1.0.0",
             DownloadCount = 100,
             FoundByKeywords = ["test"]
@@ -52,7 +53,7 @@ public class PackageSearchResultTests
 
         var package2 = new PackageInfo
         {
-            Id = "MorePopular",
+            PackageId = "MorePopular",
             Version = "1.0.0",
             DownloadCount = 1000,
             FoundByKeywords = ["test"]
@@ -63,7 +64,7 @@ public class PackageSearchResultTests
             Packages = [package1, package2] // Less popular first
         };
 
-        var formatted = result.ToFormattedString();
+        var formatted = result.Format();
         var morePopularIndex = formatted.IndexOf("MorePopular");
         var lessPopularIndex = formatted.IndexOf("LessPopular");
 

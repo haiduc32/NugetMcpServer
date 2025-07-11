@@ -5,7 +5,7 @@ namespace NuGetMcpServer.Services;
 
 public class EnumFormattingService
 {
-    public string FormatEnumDefinition(Type enumType)
+    public string FormatEnumDefinition(Type enumType, string assemblyName, string packageName)
     {
         if (!enumType.IsEnum)
         {
@@ -13,6 +13,10 @@ public class EnumFormattingService
         }
 
         var sb = new StringBuilder();
+
+        var header = $"/* C# ENUM FROM {assemblyName} (Package: {packageName}) */";
+        sb.AppendLine(header);
+
         var underlyingType = Enum.GetUnderlyingType(enumType);
         var underlyingTypeName = TypeFormattingHelpers.FormatTypeName(underlyingType);
 
@@ -28,13 +32,11 @@ public class EnumFormattingService
         var names = Enum.GetNames(enumType);
         var lastIndex = names.Length - 1;
 
-        // Format each enum value
         for (var i = 0; i < names.Length; i++)
         {
             var name = names[i];
             var value = Convert.ChangeType(values.GetValue(i), underlyingType);
 
-            // Check if we need a suffix for the numeric literal based on underlying type
             var valueSuffix = underlyingType == typeof(ulong) ? "UL" :
                                 underlyingType == typeof(long) ? "L" : underlyingType == typeof(uint) ? "U" :
                                 string.Empty;
