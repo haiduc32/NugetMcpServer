@@ -1,6 +1,7 @@
 # NugetMcpServer
 
 A powerful MCP server for getting accurate interface and enum definitions from NuGet packages. It helps reduce LLM hallucinations by giving precise information about real package APIs.
+Certified by [MCPHub](https://mcphub.com/mcp-servers/dimonsmart/nugetmcpserver)
 
 ## Overview
 
