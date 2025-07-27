@@ -202,6 +202,15 @@ The server uses the .NET Generic Host and includes:
   - Returns up to 50 most popular packages with details including download counts, descriptions, and project URLs
   - Results are sorted by popularity (download count) for better relevance
 
+- `list_private_packages(searchTerm?, maxResults?, includeVersions?)` - Lists packages exclusively from private NuGet feeds and Azure DevOps feeds.
+  - Only searches private/internal package repositories, not public feeds like nuget.org
+  - Supports Azure DevOps feeds with native package filtering (filters out proxied packages by default)
+  - Supports private NuGet feeds with authentication (username/password or API key)
+  - Optional search term to filter packages by name
+  - Optional version inclusion for detailed package information
+  - Returns package details including source type, latest version, and available versions if requested
+  - Maximum results limit (1-200, default 50)
+
 ### Package Information Tools
 
 - `get_package_info(packageId, version?)` - Gets comprehensive information about a NuGet package including metadata, dependencies, and meta-package status. Shows clear warnings for meta-packages and guidance on where to find actual implementations.
@@ -320,6 +329,69 @@ Response (formatted result shows combined results):
 **Downloads**: 8,234
 **Description**: Simple maze construction toolkit
 ```
+
+### ListPrivatePackages Example
+
+#### User Query Example
+A user might ask:
+
+> "I need to see what private packages are available in our company's Azure DevOps feed. Can you list the internal packages we have?"
+
+The agent would use the MCP server to list private packages:
+
+Request:
+```json
+{
+  "name": "list_private_packages",
+  "parameters": {
+    "searchTerm": "",
+    "maxResults": 20,
+    "includeVersions": false
+  }
+}
+```
+
+Response (showing private packages from Azure DevOps and private feeds):
+```json
+{
+  "result": {
+    "searchTerm": "",
+    "totalPackages": 5,
+    "sources": [
+      {
+        "sourceName": "CompanyAzureDevOps",
+        "sourceType": "Azure DevOps",
+        "packageCount": 3,
+        "isAzureDevOps": true
+      },
+      {
+        "sourceName": "PrivateNuGet",
+        "sourceType": "Private NuGet Feed (API Key)",
+        "packageCount": 2,
+        "isAzureDevOps": false
+      }
+    ],
+    "packages": [
+      {
+        "packageId": "Company.Core.Authentication",
+        "sourceName": "CompanyAzureDevOps",
+        "sourceType": "Azure DevOps",
+        "latestVersion": "2.1.0",
+        "isAzureDevOps": true
+      },
+      {
+        "packageId": "Company.Utilities.Logging",
+        "sourceName": "PrivateNuGet",
+        "sourceType": "Private NuGet Feed (API Key)",
+        "latestVersion": "1.5.2",
+        "isAzureDevOps": false
+      }
+    ]
+  }
+}
+```
+
+This tool helps developers discover internal packages and distinguish between public and private package sources.
 
 #### How Fuzzy Search Works
 
