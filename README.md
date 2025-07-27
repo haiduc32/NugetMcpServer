@@ -19,10 +19,13 @@ You can use this server with [OllamaChat](https://github.com/DimonSmart/OllamaCh
 - **Two-phase search: direct search + AI fallback for better results**
 - **Comma-separated keyword search for fast targeted results with balanced distribution**
 - **Package popularity ranking by download count**
+- **Dual transport modes: STDIO (default) and HTTP for flexible integration**
+- **Azure DevOps feeds support with native package filtering**
+- **Private NuGet feeds support with authentication (username/password or API key)**
+- **Custom NuGet sources configuration with priority handling**
 - Reduces LLM hallucinations by giving accurate API information
 - Supports specific package versions or latest version
 - Supports generic types with correct C# formatting
-- Uses STDIO for client communication
 - Includes a time utility tool for basic server checks
 - Built with .NET 9.0 for good performance
 - Easy to integrate with VS Code, OllamaChat, and other MCP clients
@@ -62,6 +65,56 @@ After installation, you can add the server to VS Code and other MCP-compatible c
    ```
    dotnet run
    ```
+
+## Usage
+
+NugetMcpServer supports both **STDIO** (standard input/output) and **HTTP** transport modes.
+
+### STDIO Mode (Default)
+
+The default mode uses standard input/output for communication with MCP clients:
+
+```bash
+# Run in STDIO mode (default)
+dotnet run
+
+# Or explicitly specify STDIO mode
+dotnet run -- --stdio
+```
+
+This mode is ideal for:
+- VS Code with Copilot integration
+- Direct integration with MCP-compatible tools
+- Local development and testing
+
+### HTTP Mode
+
+You can also run the server in HTTP mode for web-based integrations:
+
+```bash
+# Run in HTTP mode on default port 5000
+dotnet run -- --http
+
+# Run in HTTP mode on custom port
+dotnet run -- --http --port 8080
+```
+
+**Command Line Options:**
+- `--http` or `-h`: Enable HTTP transport mode
+- `--port <port>` or `-p <port>`: Specify custom port (default: 5000)
+- `--version` or `-v`: Show version information
+
+HTTP mode is useful for:
+- Web-based MCP clients
+- Integration with web applications
+- Remote access scenarios
+- Docker deployments
+
+**Example HTTP URLs:**
+- Default: `http://localhost:5000`
+- Custom port: `http://localhost:8080`
+
+The HTTP server implements the MCP protocol over HTTP and provides the same functionality as the STDIO mode.
 
 ## Configuration
 
