@@ -9,4 +9,10 @@ public class NuGetSourceConfiguration
     public string? ApiKey { get; set; }
     public bool IsEnabled { get; set; } = true;
     public int Priority { get; set; } = 0;
+    
+    // Azure DevOps specific properties
+    public bool IsAzureDevOps { get; set; } = false;
+    public string? Organization { get; set; }
+    public string? FeedId { get; set; }
+    public bool FilterNativePackagesOnly { get; set; } = true;
 }

@@ -43,7 +43,11 @@ The server uses `appsettings.json` for configuration. Create or modify this file
         "Username": "user@company.com",
         "Password": "your-personal-access-token",
         "IsEnabled": true,
-        "Priority": 80
+        "Priority": 80,
+        "IsAzureDevOps": true,
+        "Organization": "company",
+        "FeedId": "internal",
+        "FilterNativePackagesOnly": true
       },
       {
         "Name": "github-packages",
@@ -77,6 +81,13 @@ The server uses `appsettings.json` for configuration. Create or modify this file
 
 - **DefaultTimeoutSeconds**: Override default timeout for HTTP requests
 - **MaxRetryAttempts**: Override default retry attempts
+
+### Azure DevOps Specific Properties
+
+- **IsAzureDevOps**: Set to `true` to enable Azure DevOps API integration for advanced package filtering
+- **Organization**: Your Azure DevOps organization name (required when IsAzureDevOps is true)
+- **FeedId**: The feed name or GUID (required when IsAzureDevOps is true)
+- **FilterNativePackagesOnly**: When `true` (default), only native packages are returned, excluding proxied packages from upstream sources like nuget.org
 
 ## Authentication Methods
 
@@ -120,9 +131,19 @@ Used for GitHub Packages, MyGet, and other services:
   "Username": "{username}",
   "Password": "{personal-access-token}",
   "IsEnabled": true,
-  "Priority": 80
+  "Priority": 80,
+  "IsAzureDevOps": true,
+  "Organization": "{organization}",
+  "FeedId": "{feed}",
+  "FilterNativePackagesOnly": true
 }
 ```
+
+**Azure DevOps Specific Properties:**
+- **IsAzureDevOps**: Set to `true` to enable Azure DevOps API integration
+- **Organization**: Your Azure DevOps organization name
+- **FeedId**: The feed name or GUID
+- **FilterNativePackagesOnly**: When `true` (default), only packages directly added to the feed are returned (excludes packages proxied from nuget.org and other upstream sources)
 
 ### GitHub Packages
 

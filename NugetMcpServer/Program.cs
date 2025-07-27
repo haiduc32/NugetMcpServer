@@ -42,6 +42,7 @@ internal class Program
 
         builder.Services.AddSingleton<NuGetHttpClientService>();
         builder.Services.AddSingleton<MetaPackageDetector>();
+        builder.Services.AddSingleton<AzureDevOpsPackageService>();
         builder.Services.AddSingleton<NuGetPackageService>();
         builder.Services.AddSingleton<PackageSearchService>();
         builder.Services.AddSingleton<ArchiveProcessingService>();

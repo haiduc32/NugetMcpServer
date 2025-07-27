@@ -43,7 +43,8 @@ public abstract class TestBase(ITestOutputHelper testOutput)
     {
         var httpClientService = CreateNuGetHttpClientService();
         var metaPackageDetector = CreateMetaPackageDetector();
-        return new NuGetPackageService(NullLogger<NuGetPackageService>.Instance, httpClientService, metaPackageDetector);
+        var azureDevOpsService = new AzureDevOpsPackageService(NullLogger<AzureDevOpsPackageService>.Instance);
+        return new NuGetPackageService(NullLogger<NuGetPackageService>.Instance, httpClientService, metaPackageDetector, azureDevOpsService);
     }
 
     protected ArchiveProcessingService CreateArchiveProcessingService()

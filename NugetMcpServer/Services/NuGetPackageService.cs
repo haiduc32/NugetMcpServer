@@ -17,7 +17,7 @@ using NuGetMcpServer.Models;
 
 namespace NuGetMcpServer.Services;
 
-public class NuGetPackageService(ILogger<NuGetPackageService> logger, NuGetHttpClientService httpClientService, MetaPackageDetector metaPackageDetector)
+public class NuGetPackageService(ILogger<NuGetPackageService> logger, NuGetHttpClientService httpClientService, MetaPackageDetector metaPackageDetector, AzureDevOpsPackageService azureDevOpsPackageService)
 {
 
     public async Task<string> GetLatestVersion(string packageId)
@@ -29,11 +29,33 @@ public class NuGetPackageService(ILogger<NuGetPackageService> logger, NuGetHttpC
     public async Task<IReadOnlyList<string>> GetPackageVersions(string packageId)
     {
         var sources = httpClientService.GetEnabledSources();
+        var exceptions = new List<Exception>();
         
         foreach (var source in sources)
         {
             try
             {
+                // Use Azure DevOps API if this is an Azure DevOps feed
+                if (source.IsAzureDevOps)
+                {
+                    logger.LogInformation("Fetching versions for package {PackageId} from Azure DevOps feed {SourceName}", packageId, source.Name);
+                    
+                    var azureHttpClient = httpClientService.GetHttpClient(source.Name);
+                    var azureVersions = await azureDevOpsPackageService.GetPackageVersionsAsync(azureHttpClient, source, packageId);
+                    
+                    if (azureVersions.Count > 0)
+                    {
+                        logger.LogInformation("Found {VersionCount} versions for package {PackageId} from Azure DevOps feed {SourceName}", azureVersions.Count, packageId, source.Name);
+                        return azureVersions;
+                    }
+                    else
+                    {
+                        logger.LogInformation("No versions found for package {PackageId} from Azure DevOps feed {SourceName}", packageId, source.Name);
+                        continue;
+                    }
+                }
+                
+                // Use standard NuGet API for regular feeds
                 string indexUrl = $"{source.Url.TrimEnd('/')}/{packageId.ToLower()}/index.json";
                 logger.LogInformation("Fetching versions for package {PackageId} from {SourceName} at {Url}", packageId, source.Name, indexUrl);
                 
@@ -58,8 +80,15 @@ public class NuGetPackageService(ILogger<NuGetPackageService> logger, NuGetHttpC
             }
             catch (Exception ex)
             {
+                exceptions.Add(ex);
                 logger.LogWarning(ex, "Failed to get package versions from source {SourceName}, trying next source", source.Name);
             }
+        }
+        
+        // If all exceptions are HttpRequestExceptions, throw the first one to preserve the original behavior
+        if (exceptions.All(ex => ex is HttpRequestException))
+        {
+            throw exceptions.First();
         }
         
         throw new InvalidOperationException($"Failed to get package versions for {packageId} from all configured sources");
@@ -79,6 +108,32 @@ public class NuGetPackageService(ILogger<NuGetPackageService> logger, NuGetHttpC
         {
             try
             {
+                // Use Azure DevOps API if this is an Azure DevOps feed
+                if (source.IsAzureDevOps)
+                {
+                    logger.LogInformation("Downloading package from Azure DevOps feed {SourceName}", source.Name);
+                    progress?.ReportMessage($"Starting package download {packageId} v{version} from Azure DevOps feed {source.Name}");
+
+                    var azureHttpClient = httpClientService.GetHttpClient(source.Name);
+                    var stream = await azureDevOpsPackageService.DownloadPackageAsync(azureHttpClient, source, packageId, version);
+                    
+                    if (stream != null)
+                    {
+                        var memoryStream = new MemoryStream();
+                        await stream.CopyToAsync(memoryStream);
+                        memoryStream.Position = 0;
+                        
+                        progress?.ReportMessage("Package downloaded successfully from Azure DevOps");
+                        return memoryStream;
+                    }
+                    else
+                    {
+                        logger.LogWarning("Failed to download package from Azure DevOps feed {SourceName}, trying next source", source.Name);
+                        continue;
+                    }
+                }
+                
+                // Use standard NuGet API for regular feeds
                 string url = $"{source.Url.TrimEnd('/')}/{packageId.ToLower()}/{version}/{packageId.ToLower()}.{version}.nupkg";
                 logger.LogInformation("Downloading package from {SourceName} at {Url}", source.Name, url);
 

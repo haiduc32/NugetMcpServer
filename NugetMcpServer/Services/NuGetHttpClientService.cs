@@ -16,7 +16,7 @@ public class NuGetHttpClientService(ILogger<NuGetHttpClientService> logger, IOpt
     private readonly NuGetConfiguration _configuration = configuration.Value;
     private readonly Dictionary<string, HttpClient> _httpClients = new();
 
-    public HttpClient GetHttpClient(string sourceName)
+    public virtual HttpClient GetHttpClient(string sourceName)
     {
         if (_httpClients.TryGetValue(sourceName, out var existingClient))
         {
@@ -34,12 +34,12 @@ public class NuGetHttpClientService(ILogger<NuGetHttpClientService> logger, IOpt
         return httpClient;
     }
 
-    public IEnumerable<NuGetSourceConfiguration> GetEnabledSources()
+    public virtual IEnumerable<NuGetSourceConfiguration> GetEnabledSources()
     {
         return _configuration.Sources.Where(s => s.IsEnabled).OrderByDescending(s => s.Priority);
     }
 
-    public NuGetSourceConfiguration GetPrimarySource()
+    public virtual NuGetSourceConfiguration GetPrimarySource()
     {
         return GetEnabledSources().FirstOrDefault() 
                ?? throw new InvalidOperationException("No enabled NuGet sources configured");
@@ -51,6 +51,17 @@ public class NuGetHttpClientService(ILogger<NuGetHttpClientService> logger, IOpt
         {
             Timeout = TimeSpan.FromSeconds(_configuration.DefaultTimeoutSeconds)
         };
+
+        // Validate authentication configuration - catch empty strings and whitespace
+        if (source.ApiKey == "" || (source.ApiKey != null && string.IsNullOrWhiteSpace(source.ApiKey)))
+        {
+            throw new InvalidOperationException($"API key cannot be empty or whitespace for source '{source.Name}'");
+        }
+
+        if (source.Username == "" || (source.Username != null && string.IsNullOrWhiteSpace(source.Username)))
+        {
+            throw new InvalidOperationException($"Username cannot be empty or whitespace for source '{source.Name}'");
+        }
 
         if (!string.IsNullOrWhiteSpace(source.ApiKey))
         {
