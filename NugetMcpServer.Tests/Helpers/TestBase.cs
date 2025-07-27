@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
+using NuGetMcpServer.Models;
 using NuGetMcpServer.Services;
 
 using Xunit.Abstractions;
@@ -9,17 +11,39 @@ namespace NuGetMcpServer.Tests.Helpers;
 public abstract class TestBase(ITestOutputHelper testOutput)
 {
     protected readonly ITestOutputHelper TestOutput = testOutput;
-    protected readonly HttpClient HttpClient = new();
 
     protected MetaPackageDetector CreateMetaPackageDetector()
     {
         return new MetaPackageDetector(NullLogger<MetaPackageDetector>.Instance);
     }
 
+    protected NuGetHttpClientService CreateNuGetHttpClientService()
+    {
+        var configuration = new NuGetConfiguration
+        {
+            Sources =
+            [
+                new NuGetSourceConfiguration
+                {
+                    Name = "nuget.org",
+                    Url = "https://api.nuget.org/v3-flatcontainer/",
+                    IsEnabled = true,
+                    Priority = 100
+                }
+            ],
+            DefaultTimeoutSeconds = 30,
+            MaxRetryAttempts = 3
+        };
+        
+        var options = Options.Create(configuration);
+        return new NuGetHttpClientService(NullLogger<NuGetHttpClientService>.Instance, options);
+    }
+
     protected NuGetPackageService CreateNuGetPackageService()
     {
+        var httpClientService = CreateNuGetHttpClientService();
         var metaPackageDetector = CreateMetaPackageDetector();
-        return new NuGetPackageService(NullLogger<NuGetPackageService>.Instance, HttpClient, metaPackageDetector);
+        return new NuGetPackageService(NullLogger<NuGetPackageService>.Instance, httpClientService, metaPackageDetector);
     }
 
     protected ArchiveProcessingService CreateArchiveProcessingService()

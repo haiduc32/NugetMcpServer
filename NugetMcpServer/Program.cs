@@ -4,10 +4,12 @@ using System.Net.Http;
 using System.Reflection;
 using System.Threading.Tasks;
 
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
+using NuGetMcpServer.Models;
 using NuGetMcpServer.Services;
 using NuGetMcpServer.Tools;
 
@@ -34,7 +36,11 @@ internal class Program
             options.LogToStandardErrorThreshold = LogLevel.Trace;
         });
 
-        builder.Services.AddSingleton<HttpClient>();
+        // Configure NuGet sources
+        builder.Services.Configure<NuGetConfiguration>(
+            builder.Configuration.GetSection("NuGet"));
+
+        builder.Services.AddSingleton<NuGetHttpClientService>();
         builder.Services.AddSingleton<MetaPackageDetector>();
         builder.Services.AddSingleton<NuGetPackageService>();
         builder.Services.AddSingleton<PackageSearchService>();

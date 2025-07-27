@@ -63,6 +63,79 @@ After installation, you can add the server to VS Code and other MCP-compatible c
    dotnet run
    ```
 
+## Configuration
+
+### Custom NuGet Sources
+
+NugetMcpServer supports connecting to custom NuGet feeds including private feeds that require authentication. This is configured through the `appsettings.json` file.
+
+#### Basic Configuration
+
+Create or modify `appsettings.json` in the same directory as the executable:
+
+```json
+{
+  "NuGet": {
+    "Sources": [
+      {
+        "Name": "nuget.org",
+        "Url": "https://api.nuget.org/v3-flatcontainer/",
+        "IsEnabled": true,
+        "Priority": 100
+      }
+    ],
+    "DefaultTimeoutSeconds": 30,
+    "MaxRetryAttempts": 3
+  }
+}
+```
+
+#### Advanced Configuration with Private Feeds
+
+```json
+{
+  "NuGet": {
+    "Sources": [
+      {
+        "Name": "nuget.org",
+        "Url": "https://api.nuget.org/v3-flatcontainer/",
+        "IsEnabled": true,
+        "Priority": 100
+      },
+      {
+        "Name": "private-company-feed",
+        "Url": "https://pkgs.dev.azure.com/company/_packaging/internal/nuget/v3/index.json",
+        "Username": "user@company.com",
+        "Password": "your-personal-access-token",
+        "IsEnabled": true,
+        "Priority": 80
+      },
+      {
+        "Name": "github-packages",
+        "Url": "https://nuget.pkg.github.com/organization/index.json",
+        "ApiKey": "ghp_your-github-personal-access-token",
+        "IsEnabled": true,
+        "Priority": 70
+      }
+    ],
+    "DefaultTimeoutSeconds": 60,
+    "MaxRetryAttempts": 3
+  }
+}
+```
+
+**Authentication Methods:**
+- **Basic Authentication**: Use `Username` + `Password` for Azure DevOps, TeamCity, etc.
+- **API Key**: Use `ApiKey` for GitHub Packages, MyGet, etc.
+
+**Source Properties:**
+- **Priority**: Higher numbers have higher priority (sources are tried in order)
+- **IsEnabled**: Whether this source should be used
+- **DefaultTimeoutSeconds**: Custom timeout for this source
+- **MaxRetryAttempts**: Custom retry attempts
+
+For detailed configuration examples and troubleshooting, see [NUGET_SOURCES.md](NUGET_SOURCES.md).
+
 ## Project Structure
 
 - `Program.cs` - Main entry point that configures and runs the MCP server
@@ -70,13 +143,18 @@ After installation, you can add the server to VS Code and other MCP-compatible c
 - `Tools/GetInterfaceDefinitionTool.cs` - Extracts interface definitions from NuGet packages
 - `Tools/ListInterfacesTool.cs` - Lists all interfaces in NuGet packages
 - `Tools/GetEnumDefinitionTool.cs` - Extracts enum definitions from NuGet packages
-- `Services/NuGetPackageService.cs` - Works with NuGet packages
+- `Services/NuGetPackageService.cs` - Works with NuGet packages and manages package sources
+- `Services/NuGetHttpClientService.cs` - Manages HTTP clients with authentication for multiple NuGet sources
 - `Services/InterfaceFormattingService.cs` - Formats interface definitions
 - `Services/EnumFormattingService.cs` - Formats enum definitions
 - `Services/InterfaceInfo.cs` - Model for interface information
 - `Services/InterfaceListResult.cs` - Response model for interface listing
+- `Models/NuGetConfiguration.cs` - Configuration model for NuGet sources
+- `Models/NuGetSourceConfiguration.cs` - Configuration model for individual NuGet sources
 - `Common/McpToolBase.cs` - Base class for MCP tools
 - `Extensions/` - Extension methods for string formatting and exception handling
+- `appsettings.json` - Configuration file for NuGet sources and application settings
+- `NUGET_SOURCES.md` - Detailed documentation for configuring custom NuGet sources
 
 ## Implementation Details
 
@@ -86,9 +164,11 @@ The server uses the .NET Generic Host and includes:
 - Console logging set to trace level
 - MCP server registered with STDIO transport
 - Automatic discovery and registration of tools
-- HttpClient service for downloading NuGet packages
-- NuGetPackageService for package operations
+- Multi-source NuGet support with authentication
+- NuGetHttpClientService for managing authenticated HTTP clients
+- NuGetPackageService for package operations across multiple sources
 - InterfaceFormattingService and EnumFormattingService for code formatting
+- Configuration-based source management with priority handling
 
 ## Available Tools
 

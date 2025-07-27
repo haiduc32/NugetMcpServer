@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Reflection;
 using System.Text.Json;
@@ -16,7 +17,7 @@ using NuGetMcpServer.Models;
 
 namespace NuGetMcpServer.Services;
 
-public class NuGetPackageService(ILogger<NuGetPackageService> logger, HttpClient httpClient, MetaPackageDetector metaPackageDetector)
+public class NuGetPackageService(ILogger<NuGetPackageService> logger, NuGetHttpClientService httpClientService, MetaPackageDetector metaPackageDetector)
 {
 
     public async Task<string> GetLatestVersion(string packageId)
@@ -27,24 +28,41 @@ public class NuGetPackageService(ILogger<NuGetPackageService> logger, HttpClient
 
     public async Task<IReadOnlyList<string>> GetPackageVersions(string packageId)
     {
-        string indexUrl = $"https://api.NuGet.org/v3-flatcontainer/{packageId.ToLower()}/index.json";
-        logger.LogInformation("Fetching versions for package {PackageId} from {Url}", packageId, indexUrl);
-        string json = await httpClient.GetStringAsync(indexUrl);
-        using JsonDocument doc = JsonDocument.Parse(json);
-
-        JsonElement versionsArray = doc.RootElement.GetProperty("versions");
-        var versions = new List<string>();
-
-        foreach (JsonElement element in versionsArray.EnumerateArray())
+        var sources = httpClientService.GetEnabledSources();
+        
+        foreach (var source in sources)
         {
-            string? version = element.GetString();
-            if (!string.IsNullOrWhiteSpace(version))
+            try
             {
-                versions.Add(version);
+                string indexUrl = $"{source.Url.TrimEnd('/')}/{packageId.ToLower()}/index.json";
+                logger.LogInformation("Fetching versions for package {PackageId} from {SourceName} at {Url}", packageId, source.Name, indexUrl);
+                
+                var httpClient = httpClientService.GetHttpClient(source.Name);
+                string json = await httpClient.GetStringAsync(indexUrl);
+                using JsonDocument doc = JsonDocument.Parse(json);
+
+                JsonElement versionsArray = doc.RootElement.GetProperty("versions");
+                var versions = new List<string>();
+
+                foreach (JsonElement element in versionsArray.EnumerateArray())
+                {
+                    string? version = element.GetString();
+                    if (!string.IsNullOrWhiteSpace(version))
+                    {
+                        versions.Add(version);
+                    }
+                }
+
+                logger.LogInformation("Found {VersionCount} versions for package {PackageId} from {SourceName}", versions.Count, packageId, source.Name);
+                return versions;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to get package versions from source {SourceName}, trying next source", source.Name);
             }
         }
-
-        return versions;
+        
+        throw new InvalidOperationException($"Failed to get package versions for {packageId} from all configured sources");
     }
 
     public async Task<IReadOnlyList<string>> GetLatestVersions(string packageId, int count = 20)
@@ -55,16 +73,31 @@ public class NuGetPackageService(ILogger<NuGetPackageService> logger, HttpClient
 
     public async Task<MemoryStream> DownloadPackageAsync(string packageId, string version, IProgressNotifier? progress = null)
     {
-        string url = $"https://api.NuGet.org/v3-flatcontainer/{packageId.ToLower()}/{version}/{packageId.ToLower()}.{version}.nupkg";
-        logger.LogInformation("Downloading package from {Url}", url);
+        var sources = httpClientService.GetEnabledSources();
+        
+        foreach (var source in sources)
+        {
+            try
+            {
+                string url = $"{source.Url.TrimEnd('/')}/{packageId.ToLower()}/{version}/{packageId.ToLower()}.{version}.nupkg";
+                logger.LogInformation("Downloading package from {SourceName} at {Url}", source.Name, url);
 
-        progress?.ReportMessage($"Starting package download {packageId} v{version}");
+                progress?.ReportMessage($"Starting package download {packageId} v{version} from {source.Name}");
 
-        byte[] response = await httpClient.GetByteArrayAsync(url);
+                var httpClient = httpClientService.GetHttpClient(source.Name);
+                byte[] response = await httpClient.GetByteArrayAsync(url);
 
-        progress?.ReportMessage("Package downloaded successfully");
+                progress?.ReportMessage("Package downloaded successfully");
 
-        return new MemoryStream(response);
+                return new MemoryStream(response);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to download package from source {SourceName}, trying next source", source.Name);
+            }
+        }
+        
+        throw new InvalidOperationException($"Failed to download package {packageId} v{version} from all configured sources");
     }
 
     public (Assembly? assembly, Type[] types) LoadAssemblyFromMemoryWithTypes(byte[] assemblyData)
@@ -151,6 +184,8 @@ public class NuGetPackageService(ILogger<NuGetPackageService> logger, HttpClient
 
         logger.LogInformation("Searching packages with query '{Query}' from {Url}", query, searchUrl);
 
+        var primarySource = httpClientService.GetPrimarySource();
+        var httpClient = httpClientService.GetHttpClient(primarySource.Name);
         var json = await httpClient.GetStringAsync(searchUrl);
         using JsonDocument doc = JsonDocument.Parse(json);
         List<PackageInfo> packages = [];
