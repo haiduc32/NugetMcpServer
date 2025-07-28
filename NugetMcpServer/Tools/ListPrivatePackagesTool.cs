@@ -11,6 +11,8 @@ using Microsoft.Extensions.Logging;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
+using NuGet.Common;
+
 using NuGetMcpServer.Common;
 using NuGetMcpServer.Extensions;
 using NuGetMcpServer.Services;
@@ -20,7 +22,7 @@ using static NuGetMcpServer.Extensions.ExceptionHandlingExtensions;
 namespace NuGetMcpServer.Tools;
 
 [McpServerToolType]
-public class ListPrivatePackagesTool(ILogger<ListPrivatePackagesTool> logger, NuGetHttpClientService httpClientService, AzureDevOpsPackageService azureDevOpsPackageService, NuGetPackageService packageService) : McpToolBase<ListPrivatePackagesTool>(logger, null!)
+public class ListPrivatePackagesTool(ILogger<ListPrivatePackagesTool> logger, NuGetRepositoryService repositoryService, AzureDevOpsPackageService azureDevOpsPackageService, NuGetPackageService packageService, NuGetHttpClientService httpClientService) : McpToolBase<ListPrivatePackagesTool>(logger, null!)
 {
     [McpServerTool]
     [Description("Lists packages exclusively from private NuGet feeds (feeds with authentication) and Azure DevOps feeds. This tool only searches private/internal package repositories, not public feeds like nuget.org.")]
@@ -130,7 +132,7 @@ public class ListPrivatePackagesTool(ILogger<ListPrivatePackagesTool> logger, Nu
 
     private IEnumerable<Models.NuGetSourceConfiguration> GetPrivateSources()
     {
-        return httpClientService.GetEnabledSources()
+        return repositoryService.GetEnabledSources()
             .Where(IsPrivateSource)
             .OrderByDescending(s => s.Priority);
     }

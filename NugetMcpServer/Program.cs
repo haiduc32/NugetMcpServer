@@ -116,6 +116,7 @@ internal class Program
     private static void RegisterServices(IServiceCollection services)
     {
         services.AddSingleton<NuGetHttpClientService>();
+        services.AddSingleton<NuGetRepositoryService>();
         services.AddSingleton<MetaPackageDetector>();
         services.AddSingleton<AzureDevOpsPackageService>();
         services.AddSingleton<NuGetPackageService>();

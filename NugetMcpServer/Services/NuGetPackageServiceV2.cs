@@ -2,15 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net;
-using System.Net.Http;
 using System.Reflection;
-using System.Text.Json;
 using System.Threading.Tasks;
 
 using Microsoft.Extensions.Logging;
 
-using NuGet.Configuration;
 using NuGet.Packaging;
 using NuGet.Protocol.Core.Types;
 
@@ -19,12 +15,11 @@ using NuGetMcpServer.Models;
 
 namespace NuGetMcpServer.Services;
 
-public class NuGetPackageService(ILogger<NuGetPackageService> logger, NuGetRepositoryService repositoryService, MetaPackageDetector metaPackageDetector, AzureDevOpsPackageService azureDevOpsPackageService)
+public class NuGetPackageServiceV2(ILogger<NuGetPackageServiceV2> logger, NuGetRepositoryService repositoryService, MetaPackageDetector metaPackageDetector, AzureDevOpsPackageService azureDevOpsPackageService)
 {
-
     public async Task<string> GetLatestVersion(string packageId)
     {
-        IReadOnlyList<string> versions = await GetPackageVersions(packageId);
+        var versions = await GetPackageVersions(packageId);
         return versions.Last();
     }
 
@@ -35,7 +30,7 @@ public class NuGetPackageService(ILogger<NuGetPackageService> logger, NuGetRepos
 
     public async Task<IReadOnlyList<string>> GetLatestVersions(string packageId, int count = 20)
     {
-        IReadOnlyList<string> versions = await GetPackageVersions(packageId);
+        var versions = await GetPackageVersions(packageId);
         return versions.TakeLast(count).ToList();
     }
 
@@ -47,6 +42,18 @@ public class NuGetPackageService(ILogger<NuGetPackageService> logger, NuGetRepos
         {
             try
             {
+                // Use Azure DevOps API if this is an Azure DevOps feed
+                if (source.IsAzureDevOps)
+                {
+                    logger.LogInformation("Downloading package from Azure DevOps feed {SourceName}", source.Name);
+                    progress?.ReportMessage($"Starting package download {packageId} v{version} from Azure DevOps feed {source.Name}");
+
+                    // For Azure DevOps, we still need to use the HTTP client approach for now
+                    // since NuGet.Protocol doesn't handle Azure DevOps native APIs
+                    logger.LogWarning("Azure DevOps support requires HTTP client fallback - this functionality needs to be migrated");
+                    continue;
+                }
+                
                 // Use NuGet.Protocol for standard feeds
                 progress?.ReportMessage($"Starting package download {packageId} v{version} from {source.Name}");
 
@@ -71,30 +78,18 @@ public class NuGetPackageService(ILogger<NuGetPackageService> logger, NuGetRepos
     {
         try
         {
-            var assembly = Assembly.Load(assemblyData);
+            Assembly? assembly = LoadAssemblyFromMemory(assemblyData);
+            if (assembly == null) return (null, []);
 
-            try
-            {
-                var a = assembly.GetExportedTypes();
-                var types = assembly.GetTypes();
-                return (assembly, types);
-            }
-            catch (ReflectionTypeLoadException ex)
-            {
-                logger.LogWarning("Some types could not be loaded from assembly due to missing dependencies. Loaded {LoadedCount} out of {TotalCount} types",
-                    ex.Types.Count(t => t != null), ex.Types.Length);
-
-                var loadedTypes = ex.Types.Where(t => t != null).Cast<Type>().ToArray();
-                return (assembly, loadedTypes);
-            }
+            Type[] types = assembly.GetTypes();
+            return (assembly, types);
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to load assembly from memory. Assembly size: {Size} bytes", assemblyData.Length);
-            return (null, Array.Empty<Type>());
+            logger.LogWarning(ex, "Failed to load assembly and extract types from memory");
+            return (null, []);
         }
     }
-
 
     public Assembly? LoadAssemblyFromMemory(byte[] assemblyData)
     {
@@ -104,11 +99,10 @@ public class NuGetPackageService(ILogger<NuGetPackageService> logger, NuGetRepos
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to load assembly from memory. Assembly size: {Size} bytes", assemblyData.Length);
+            logger.LogWarning(ex, "Failed to load assembly from memory");
             return null;
         }
     }
-
 
     public List<PackageDependency> GetPackageDependencies(Stream packageStream)
     {
@@ -174,7 +168,6 @@ public class NuGetPackageService(ILogger<NuGetPackageService> logger, NuGetRepos
                         Tags = result.Tags?.Split(' ', ',').Where(t => !string.IsNullOrWhiteSpace(t)).ToList() ?? [],
                         ProjectUrl = result.ProjectUrl?.ToString() ?? string.Empty,
                         LicenseUrl = result.LicenseUrl?.ToString() ?? string.Empty,
-                        DownloadCount = result.DownloadCount ?? 0,
                         IsMetaPackage = false, // Will be determined later if needed
                         Dependencies = []
                     };
@@ -195,7 +188,7 @@ public class NuGetPackageService(ILogger<NuGetPackageService> logger, NuGetRepos
             }
         }
 
-        return results.OrderByDescending(p => p.DownloadCount).ToList();
+        return results;
     }
 
     public PackageInfo GetPackageInfoAsync(Stream packageStream, string packageId, string version)
@@ -234,6 +227,10 @@ public class NuGetPackageService(ILogger<NuGetPackageService> logger, NuGetRepos
                 PackageId = packageId,
                 Version = version,
                 Description = "Error retrieving package information",
+                Authors = [],
+                Tags = [],
+                ProjectUrl = string.Empty,
+                LicenseUrl = string.Empty,
                 IsMetaPackage = false,
                 Dependencies = []
             };
