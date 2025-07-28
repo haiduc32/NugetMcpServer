@@ -36,7 +36,9 @@ public class NuGetHttpClientService(ILogger<NuGetHttpClientService> logger, IOpt
 
     public virtual IEnumerable<NuGetSourceConfiguration> GetEnabledSources()
     {
-        return _configuration.Sources.Where(s => s.IsEnabled).OrderByDescending(s => s.Priority);
+        var enabledSources = _configuration.Sources.Where(s => s.IsEnabled);
+        var orderedSources = enabledSources.OrderByDescending(s => s.Priority);
+        return orderedSources;
     }
 
     public virtual NuGetSourceConfiguration GetPrimarySource()

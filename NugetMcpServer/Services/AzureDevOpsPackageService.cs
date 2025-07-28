@@ -146,7 +146,7 @@ public class AzureDevOpsPackageService(ILogger<AzureDevOpsPackageService> logger
 
     private async Task<List<AzureDevOpsPackage>> GetPackagesAsync(HttpClient httpClient, NuGetSourceConfiguration source)
     {
-        var url = $"https://pkgs.dev.azure.com/{source.Organization}/_apis/packaging/feeds/{source.FeedId}/packages?api-version=6.0-preview.1&includeUrls=true&protocolType=nuget";
+        var url = $"https://feeds.dev.azure.com/{source.Organization}//_apis/packaging/Feeds/{source.FeedId}/packages?api-version=6.0-preview.1&directUpstreamId=00000000-0000-0000-0000-000000000000"; //$"https://pkgs.dev.azure.com/{source.Organization}/_apis/packaging/feeds/{source.FeedId}/packages?api-version=6.0-preview.1&includeUrls=true&protocolType=nuget";
         
         var response = await httpClient.GetStringAsync(url);
         var result = JsonSerializer.Deserialize<AzureDevOpsPackagesResponse>(response);

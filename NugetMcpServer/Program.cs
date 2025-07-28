@@ -67,6 +67,8 @@ internal class Program
             options.LogToStandardErrorThreshold = LogLevel.Trace;
         });
 
+        //builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+        var a  = builder.Configuration.GetSection("NuGet");
         // Configure NuGet sources
         builder.Services.Configure<NuGetConfiguration>(
             builder.Configuration.GetSection("NuGet"));

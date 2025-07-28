@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 
 using Microsoft.Extensions.Logging;
 
+using NuGet.Configuration;
 using NuGet.Packaging;
 
 using NuGetMcpServer.Extensions;
@@ -34,31 +35,13 @@ public class NuGetPackageService(ILogger<NuGetPackageService> logger, NuGetHttpC
         foreach (var source in sources)
         {
             try
-            {
-                // Use Azure DevOps API if this is an Azure DevOps feed
-                if (source.IsAzureDevOps)
-                {
-                    logger.LogInformation("Fetching versions for package {PackageId} from Azure DevOps feed {SourceName}", packageId, source.Name);
-                    
-                    var azureHttpClient = httpClientService.GetHttpClient(source.Name);
-                    var azureVersions = await azureDevOpsPackageService.GetPackageVersionsAsync(azureHttpClient, source, packageId);
-                    
-                    if (azureVersions.Count > 0)
-                    {
-                        logger.LogInformation("Found {VersionCount} versions for package {PackageId} from Azure DevOps feed {SourceName}", azureVersions.Count, packageId, source.Name);
-                        return azureVersions;
-                    }
-                    else
-                    {
-                        logger.LogInformation("No versions found for package {PackageId} from Azure DevOps feed {SourceName}", packageId, source.Name);
-                        continue;
-                    }
-                }
-                
+            {                
                 // Use standard NuGet API for regular feeds
-                string indexUrl = $"{source.Url.TrimEnd('/')}/{packageId.ToLower()}/index.json";
+                string indexUrl = source.Url.EndsWith("index.json", StringComparison.OrdinalIgnoreCase) 
+                    ? source.Url 
+                    : $"{source.Url.TrimEnd('/')}/{packageId.ToLower()}/index.json";
                 logger.LogInformation("Fetching versions for package {PackageId} from {SourceName} at {Url}", packageId, source.Name, indexUrl);
-                
+
                 var httpClient = httpClientService.GetHttpClient(source.Name);
                 string json = await httpClient.GetStringAsync(indexUrl);
                 using JsonDocument doc = JsonDocument.Parse(json);

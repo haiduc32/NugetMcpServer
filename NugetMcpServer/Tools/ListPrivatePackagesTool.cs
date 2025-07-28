@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 using ModelContextProtocol;
@@ -140,12 +141,16 @@ public class ListPrivatePackagesTool(ILogger<ListPrivatePackagesTool> logger, Nu
         // 1. It's an Azure DevOps feed, OR
         // 2. It has authentication (username/password or API key), OR  
         // 3. It's not the default public nuget.org feed
-        return source.IsAzureDevOps ||
-               !string.IsNullOrWhiteSpace(source.Username) ||
-               !string.IsNullOrWhiteSpace(source.Password) ||
-               !string.IsNullOrWhiteSpace(source.ApiKey) ||
-               (!source.Url.Contains("nuget.org", StringComparison.OrdinalIgnoreCase) &&
-                !source.Url.Contains("api.nuget.org", StringComparison.OrdinalIgnoreCase));
+
+        bool isAzureDevOps = source.IsAzureDevOps;
+        bool hasUsername = !string.IsNullOrWhiteSpace(source.Username);
+        bool hasPassword = !string.IsNullOrWhiteSpace(source.Password);
+        bool hasApiKey = !string.IsNullOrWhiteSpace(source.ApiKey);
+        bool isNotNugetOrg = !source.Url.Contains("nuget.org", StringComparison.OrdinalIgnoreCase)
+                             && !source.Url.Contains("api.nuget.org", StringComparison.OrdinalIgnoreCase);
+
+        // For debugging: set a breakpoint here to inspect each condition
+        return isAzureDevOps || hasUsername || hasPassword || hasApiKey || isNotNugetOrg;
     }
 
     private async Task<List<PrivatePackageInfo>> GetPackagesFromSource(

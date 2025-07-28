@@ -432,3 +432,6 @@ $RECYCLE.BIN/
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+
+# Ignore local development settings
+NugetMcpServer/appsettings.Development.json
