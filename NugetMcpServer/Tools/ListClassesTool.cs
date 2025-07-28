@@ -19,9 +19,8 @@ using static NuGetMcpServer.Extensions.ExceptionHandlingExtensions;
 namespace NuGetMcpServer.Tools;
 
 [McpServerToolType]
-public class ListClassesTool(ILogger<ListClassesTool> logger, NuGetPackageService packageService, ArchiveProcessingService archiveProcessingService) : McpToolBase<ListClassesTool>(logger, packageService)
+public class ListClassesTool(ILogger<ListClassesTool> logger, NuGetPackageService packageService) : McpToolBase<ListClassesTool>(logger, packageService)
 {
-    private readonly ArchiveProcessingService _archiveProcessingService = archiveProcessingService;
     [McpServerTool]
     [Description("Lists all public classes available in a specified NuGet package.")]
     public Task<ClassListResult> list_classes(
@@ -73,28 +72,25 @@ public class ListClassesTool(ILogger<ListClassesTool> logger, NuGetPackageServic
 
         progress.ReportMessage("Scanning assemblies for classes");
         packageStream.Position = 0;
-        using var packageReader = new PackageArchiveReader(packageStream, leaveStreamOpen: true);
-
-        var loadedAssemblies = _archiveProcessingService.LoadAllAssembliesFromPackage(packageReader);
-
-        foreach (var assemblyInfo in loadedAssemblies)
+        
+        // Use the new metadata-only approach to avoid loading assemblies
+        var classNames = PackageService.GetPackageClassesWithoutLoading(packageStream);
+        
+        foreach (var className in classNames)
         {
-            var classes = assemblyInfo.Types
-                .Where(t => t.IsClass && t.IsPublic && !t.IsNested)
-                .ToList();
-
-            foreach (var cls in classes)
+            // Parse the class information from the metadata
+            var lastDotIndex = className.LastIndexOf('.');
+            var name = lastDotIndex >= 0 ? className.Substring(lastDotIndex + 1) : className;
+            
+            result.Classes.Add(new ClassInfo
             {
-                result.Classes.Add(new ClassInfo
-                {
-                    Name = cls.Name,
-                    FullName = cls.FullName ?? string.Empty,
-                    AssemblyName = assemblyInfo.AssemblyName,
-                    IsStatic = cls.IsAbstract && cls.IsSealed,
-                    IsAbstract = cls.IsAbstract && !cls.IsSealed,
-                    IsSealed = cls.IsSealed && !cls.IsAbstract
-                });
-            }
+                Name = name,
+                FullName = className,
+                AssemblyName = "Unknown", // Assembly name not available from metadata-only approach
+                IsStatic = false, // These flags require reflection, not available from metadata-only
+                IsAbstract = false,
+                IsSealed = false
+            });
         }
 
         progress.ReportMessage($"Class listing completed - Found {result.Classes.Count} classes");

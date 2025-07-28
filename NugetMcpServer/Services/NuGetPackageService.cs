@@ -5,6 +5,8 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Text.Json;
 using System.Threading.Tasks;
 
@@ -67,48 +69,253 @@ public class NuGetPackageService(ILogger<NuGetPackageService> logger, NuGetRepos
         throw new InvalidOperationException($"Failed to download package {packageId} v{version} from all configured sources");
     }
 
+    public IReadOnlyList<string> GetAssemblyTypesWithoutLoading(byte[] assemblyData)
+    {
+        return ExecuteWithErrorHandling(
+            () => ExtractTypesFromMetadata(assemblyData),
+            ex => logger.LogWarning(ex, "Failed to extract types from assembly metadata. Assembly size: {Size} bytes", assemblyData.Length),
+            () => Array.Empty<string>());
+    }
+
+    public IReadOnlyList<string> GetAssemblyClassesWithoutLoading(byte[] assemblyData)
+    {
+        return ExecuteWithErrorHandling(
+            () => ExtractClassesFromMetadata(assemblyData),
+            ex => logger.LogWarning(ex, "Failed to extract classes from assembly metadata. Assembly size: {Size} bytes", assemblyData.Length),
+            () => Array.Empty<string>());
+    }
+
+    private IReadOnlyList<string> ExtractClassesFromMetadata(byte[] assemblyData)
+    {
+        using var stream = new MemoryStream(assemblyData);
+        using var peReader = new PEReader(stream);
+        
+        if (!peReader.HasMetadata)
+        {
+            logger.LogWarning("Assembly has no metadata. Size: {Size} bytes", assemblyData.Length);
+            return Array.Empty<string>();
+        }
+
+        var metadataReader = peReader.GetMetadataReader();
+        var classNames = new List<string>();
+        
+        var totalTypes = metadataReader.TypeDefinitions.Count;
+        logger.LogDebug("Found {TotalTypes} type definitions in assembly", totalTypes);
+
+        foreach (var typeDefHandle in metadataReader.TypeDefinitions)
+        {
+            var typeDef = metadataReader.GetTypeDefinition(typeDefHandle);
+            
+            var namespaceName = metadataReader.GetString(typeDef.Namespace);
+            var typeName = metadataReader.GetString(typeDef.Name);
+            var fullName = string.IsNullOrEmpty(namespaceName) ? typeName : $"{namespaceName}.{typeName}";
+            
+            logger.LogTrace("Processing type: {FullName}, Attributes: {Attributes}", fullName, typeDef.Attributes);
+            
+            // Check for public visibility more correctly
+            var visibility = typeDef.Attributes & TypeAttributes.VisibilityMask;
+            if (visibility != TypeAttributes.Public && visibility != TypeAttributes.NestedPublic)
+            {
+                logger.LogTrace("Skipping non-public type: {FullName}", fullName);
+                continue;
+            }
+
+            // Only include classes (not interfaces, enums, delegates, etc.)
+            if (typeDef.Attributes.HasFlag(TypeAttributes.Interface))
+            {
+                logger.LogTrace("Skipping interface: {FullName}", fullName);
+                continue;
+            }
+            
+            // Skip compiler-generated types
+            if (typeName.StartsWith("<") || typeName.Contains("$"))
+            {
+                logger.LogTrace("Skipping compiler-generated type: {FullName}", fullName);
+                continue;
+            }
+
+            logger.LogDebug("Adding class: {FullName}", fullName);
+            classNames.Add(fullName);
+        }
+
+        logger.LogInformation("Extracted {ClassCount} classes from {TotalTypes} total types", classNames.Count, totalTypes);
+        return classNames;
+    }
+
+    private IReadOnlyList<string> ExtractTypesFromMetadata(byte[] assemblyData)
+    {
+        using var stream = new MemoryStream(assemblyData);
+        using var peReader = new PEReader(stream);
+        
+        if (!peReader.HasMetadata)
+            return Array.Empty<string>();
+
+        var metadataReader = peReader.GetMetadataReader();
+        var typeNames = new List<string>();
+
+        foreach (var typeDefHandle in metadataReader.TypeDefinitions)
+        {
+            var typeDef = metadataReader.GetTypeDefinition(typeDefHandle);
+            
+            // Check for public visibility more correctly
+            var visibility = typeDef.Attributes & TypeAttributes.VisibilityMask;
+            if (visibility != TypeAttributes.Public && visibility != TypeAttributes.NestedPublic)
+                continue;
+
+            var namespaceName = metadataReader.GetString(typeDef.Namespace);
+            var typeName = metadataReader.GetString(typeDef.Name);
+            
+            // Skip compiler-generated types
+            if (typeName.StartsWith("<") || typeName.Contains("$"))
+                continue;
+
+            var fullName = string.IsNullOrEmpty(namespaceName) ? typeName : $"{namespaceName}.{typeName}";
+            typeNames.Add(fullName);
+        }
+
+        return typeNames;
+    }
+
+    public IReadOnlyList<string> GetPackageTypesWithoutLoading(Stream packageStream)
+    {
+        return ExecuteWithErrorHandling(
+            () => ExtractTypesFromPackage(packageStream),
+            ex => logger.LogWarning(ex, "Failed to extract types from package"),
+            () => Array.Empty<string>());
+    }
+
+    public IReadOnlyList<string> GetPackageClassesWithoutLoading(Stream packageStream)
+    {
+        return ExecuteWithErrorHandling(
+            () => ExtractClassesFromPackage(packageStream),
+            ex => logger.LogWarning(ex, "Failed to extract classes from package"),
+            () => Array.Empty<string>());
+    }
+
+    private IReadOnlyList<string> ExtractClassesFromPackage(Stream packageStream)
+    {
+        packageStream.Position = 0;
+        using var reader = new PackageArchiveReader(packageStream, leaveStreamOpen: true);
+        
+        var libFiles = reader.GetLibItems()
+            .SelectMany(lib => lib.Items)
+            .Where(file => file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        logger.LogDebug("Found {DllCount} DLL files in package: {Files}", libFiles.Count, string.Join(", ", libFiles));
+
+        if (!libFiles.Any())
+        {
+            logger.LogWarning("No DLL files found in package");
+            return Array.Empty<string>();
+        }
+
+        var allClasses = new List<string>();
+        
+        foreach (var libFile in libFiles)
+        {
+            logger.LogDebug("Processing DLL: {LibFile}", libFile);
+            
+            using var dllStream = reader.GetStream(libFile);
+            using var memoryStream = new MemoryStream();
+            dllStream.CopyTo(memoryStream);
+            
+            logger.LogDebug("DLL size: {Size} bytes", memoryStream.Length);
+            
+            var classes = GetAssemblyClassesWithoutLoading(memoryStream.ToArray());
+            logger.LogDebug("Found {ClassCount} classes in {LibFile}", classes.Count, libFile);
+            
+            allClasses.AddRange(classes);
+        }
+
+        var distinctClasses = allClasses.Distinct().ToList();
+        logger.LogInformation("Total classes extracted: {TotalClasses} (distinct: {DistinctClasses})", allClasses.Count, distinctClasses.Count);
+        
+        return distinctClasses;
+    }
+
+    private IReadOnlyList<string> ExtractTypesFromPackage(Stream packageStream)
+    {
+        packageStream.Position = 0;
+        using var reader = new PackageArchiveReader(packageStream, leaveStreamOpen: true);
+        
+        var libFiles = reader.GetLibItems()
+            .SelectMany(lib => lib.Items)
+            .Where(file => file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (!libFiles.Any())
+            return Array.Empty<string>();
+
+        var allTypes = new List<string>();
+        
+        foreach (var libFile in libFiles)
+        {
+            using var dllStream = reader.GetStream(libFile);
+            using var memoryStream = new MemoryStream();
+            dllStream.CopyTo(memoryStream);
+            
+            var types = GetAssemblyTypesWithoutLoading(memoryStream.ToArray());
+            allTypes.AddRange(types);
+        }
+
+        return allTypes.Distinct().ToList();
+    }
+
+    /// <summary>
+    /// Legacy method for loading assemblies when reflection is needed.
+    /// Consider using GetAssemblyTypesWithoutLoading for type names only.
+    /// </summary>
     public (Assembly? assembly, Type[] types) LoadAssemblyFromMemoryWithTypes(byte[] assemblyData)
     {
+        return ExecuteWithErrorHandling(
+            () => LoadAssemblyWithReflection(assemblyData),
+            ex => logger.LogWarning(ex, "Failed to load assembly from memory. Assembly size: {Size} bytes", assemblyData.Length),
+            () => (null, Array.Empty<Type>()));
+    }
+
+    private (Assembly? assembly, Type[] types) LoadAssemblyWithReflection(byte[] assemblyData)
+    {
+        var assembly = Assembly.Load(assemblyData);
+
         try
         {
-            var assembly = Assembly.Load(assemblyData);
-
-            try
-            {
-                var a = assembly.GetExportedTypes();
-                var types = assembly.GetTypes();
-                return (assembly, types);
-            }
-            catch (ReflectionTypeLoadException ex)
-            {
-                logger.LogWarning("Some types could not be loaded from assembly due to missing dependencies. Loaded {LoadedCount} out of {TotalCount} types",
-                    ex.Types.Count(t => t != null), ex.Types.Length);
-
-                var loadedTypes = ex.Types.Where(t => t != null).Cast<Type>().ToArray();
-                return (assembly, loadedTypes);
-            }
+            var types = assembly.GetTypes();
+            return (assembly, types);
         }
-        catch (Exception ex)
+        catch (ReflectionTypeLoadException ex)
         {
-            logger.LogWarning(ex, "Failed to load assembly from memory. Assembly size: {Size} bytes", assemblyData.Length);
-            return (null, Array.Empty<Type>());
+            logger.LogWarning("Some types could not be loaded from assembly due to missing dependencies. Loaded {LoadedCount} out of {TotalCount} types",
+                ex.Types.Count(t => t != null), ex.Types.Length);
+
+            if (ex.LoaderExceptions != null)
+            {
+                foreach (var loaderEx in ex.LoaderExceptions.Where(e => e != null))
+                {
+                    logger.LogDebug("Loader exception: {Exception}", loaderEx!.Message);
+                }
+            }
+
+            var loadedTypes = ex.Types.Where(t => t != null).Cast<Type>().ToArray();
+            return (assembly, loadedTypes);
         }
     }
 
-
-    public Assembly? LoadAssemblyFromMemory(byte[] assemblyData)
+    private T ExecuteWithErrorHandling<T>(
+        Func<T> operation, 
+        Action<Exception> onError, 
+        Func<T> fallback)
     {
         try
         {
-            return Assembly.Load(assemblyData);
+            return operation();
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to load assembly from memory. Assembly size: {Size} bytes", assemblyData.Length);
-            return null;
+            onError(ex);
+            return fallback();
         }
     }
-
 
     public List<PackageDependency> GetPackageDependencies(Stream packageStream)
     {
