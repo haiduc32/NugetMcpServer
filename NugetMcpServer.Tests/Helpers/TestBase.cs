@@ -26,7 +26,7 @@ public abstract class TestBase(ITestOutputHelper testOutput)
                 new NuGetSourceConfiguration
                 {
                     Name = "nuget.org",
-                    Url = "https://api.nuget.org/v3-flatcontainer/",
+                    Url = "https://api.nuget.org/v3/index.json",
                     IsEnabled = true,
                     Priority = 100
                 }
@@ -48,7 +48,7 @@ public abstract class TestBase(ITestOutputHelper testOutput)
                 new NuGetSourceConfiguration
                 {
                     Name = "nuget.org",
-                    Url = "https://api.nuget.org/v3-flatcontainer/",
+                    Url = "https://api.nuget.org/v3/index.json",
                     IsEnabled = true,
                     Priority = 100
                 }

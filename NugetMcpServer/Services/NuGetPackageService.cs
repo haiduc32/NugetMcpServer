@@ -729,6 +729,12 @@ public class NuGetPackageService(ILogger<NuGetPackageService> logger, NuGetRepos
 
     public async Task<IReadOnlyCollection<PackageInfo>> SearchPackagesAsync(string query, int take = 20)
     {
+        // Return empty results for empty or whitespace-only queries
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return new List<PackageInfo>();
+        }
+
         var results = new List<PackageInfo>();
         var sources = repositoryService.GetEnabledSources();
 

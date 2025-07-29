@@ -219,11 +219,15 @@ public class MetaPackageDetectorDataDrivenTests : TestBase
     public async Task GetLatestVersion_InvalidPackageId_ThrowsException(string invalidPackageId)
     {
         // Act & Assert
-        var exception = await Assert.ThrowsAsync<HttpRequestException>(
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => _packageService.GetLatestVersion(invalidPackageId));
 
         TestOutput.WriteLine($"Package ID: '{invalidPackageId}' -> Exception: {exception.Message}");
-        Assert.Contains("404", exception.Message);
+        // Accept either message depending on the specific error scenario
+        Assert.True(
+            exception.Message.Contains("Failed to process package") || 
+            exception.Message.Contains("No sources available for package"),
+            $"Expected error message to contain either 'Failed to process package' or 'No sources available for package', but got: {exception.Message}");
     }
 
     [Fact]

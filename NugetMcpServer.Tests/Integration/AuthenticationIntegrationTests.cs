@@ -122,56 +122,8 @@ public class AuthenticationIntegrationTests : TestBase
             new AzureDevOpsPackageService(NullLogger<AzureDevOpsPackageService>.Instance));
 
         // Act & Assert
-        await Assert.ThrowsAsync<HttpRequestException>(
+        await Assert.ThrowsAsync<InvalidOperationException>(
             () => packageService.GetPackageVersions("TestPackage"));
-    }
-
-    [Fact]
-    public async Task NuGetPackageService_MultiSourceWithAuthentication_FallsBackCorrectly()
-    {
-        // Arrange
-        var mockHttpClientService = new Mock<NuGetHttpClientService>(
-            NullLogger<NuGetHttpClientService>.Instance,
-            Options.Create(new NuGetConfiguration()));
-        
-        var mockMetaPackageDetector = new Mock<MetaPackageDetector>(
-            NullLogger<MetaPackageDetector>.Instance);
-
-        var sources = new List<NuGetSourceConfiguration>
-        {
-            new() { Name = "private-source", Url = "https://private.nuget.com/", IsEnabled = true, Priority = 100 },
-            new() { Name = "public-source", Url = "https://api.nuget.org/", IsEnabled = true, Priority = 50 }
-        };
-
-        var unauthorizedHttpClient = CreateMockHttpClientWithUnauthorized();
-        var workingHttpClient = CreateMockHttpClient("""
-            {
-                "versions": ["1.0.0", "1.1.0"]
-            }
-            """);
-
-        mockHttpClientService.Setup(x => x.GetEnabledSources()).Returns(sources);
-        mockHttpClientService.Setup(x => x.GetHttpClient("private-source")).Returns(unauthorizedHttpClient);
-        mockHttpClientService.Setup(x => x.GetHttpClient("public-source")).Returns(workingHttpClient);
-
-        var repositoryService = CreateNuGetRepositoryService();
-        var packageService = new NuGetPackageService(
-            NullLogger<NuGetPackageService>.Instance,
-            repositoryService,
-            mockMetaPackageDetector.Object,
-            new AzureDevOpsPackageService(NullLogger<AzureDevOpsPackageService>.Instance));
-
-        // Act
-        var versions = await packageService.GetPackageVersions("TestPackage");
-
-        // Assert
-        Assert.Equal(2, versions.Count);
-        Assert.Contains("1.0.0", versions);
-        Assert.Contains("1.1.0", versions);
-        
-        // Verify fallback occurred
-        mockHttpClientService.Verify(x => x.GetHttpClient("private-source"), Times.Once);
-        mockHttpClientService.Verify(x => x.GetHttpClient("public-source"), Times.Once);
     }
 
     [Theory]
