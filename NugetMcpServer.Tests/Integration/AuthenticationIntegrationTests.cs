@@ -9,12 +9,17 @@ using Moq;
 using Moq.Protected;
 using NuGetMcpServer.Models;
 using NuGetMcpServer.Services;
+using NuGetMcpServer.Tests.Helpers;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace NuGetMcpServer.Tests.Integration;
 
-public class AuthenticationIntegrationTests
+public class AuthenticationIntegrationTests : TestBase
 {
+    public AuthenticationIntegrationTests(ITestOutputHelper testOutput) : base(testOutput)
+    {
+    }
     [Fact]
     public void NuGetHttpClientService_WithBasicAuthentication_SetsCorrectHeaders()
     {
@@ -109,9 +114,10 @@ public class AuthenticationIntegrationTests
         mockHttpClientService.Setup(x => x.GetEnabledSources()).Returns(sources);
         mockHttpClientService.Setup(x => x.GetHttpClient("auth-source")).Returns(unauthorizedHttpClient);
 
+        var repositoryService = CreateNuGetRepositoryService();
         var packageService = new NuGetPackageService(
             NullLogger<NuGetPackageService>.Instance,
-            mockHttpClientService.Object,
+            repositoryService,
             mockMetaPackageDetector.Object,
             new AzureDevOpsPackageService(NullLogger<AzureDevOpsPackageService>.Instance));
 
@@ -148,9 +154,10 @@ public class AuthenticationIntegrationTests
         mockHttpClientService.Setup(x => x.GetHttpClient("private-source")).Returns(unauthorizedHttpClient);
         mockHttpClientService.Setup(x => x.GetHttpClient("public-source")).Returns(workingHttpClient);
 
+        var repositoryService = CreateNuGetRepositoryService();
         var packageService = new NuGetPackageService(
             NullLogger<NuGetPackageService>.Instance,
-            mockHttpClientService.Object,
+            repositoryService,
             mockMetaPackageDetector.Object,
             new AzureDevOpsPackageService(NullLogger<AzureDevOpsPackageService>.Instance));
 

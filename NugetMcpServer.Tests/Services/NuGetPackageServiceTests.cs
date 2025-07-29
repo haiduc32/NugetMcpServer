@@ -51,7 +51,7 @@ namespace NuGetMcpServer.Tests.Services
         }
 
         [Fact]
-        public void LoadAssemblyFromMemory_WithValidAssembly_ReturnsAssembly()
+        public void LoadAssemblyFromMemoryWithTypes_WithValidAssembly_ReturnsAssembly()
         {
             // Get a sample assembly bytes
             var currentAssembly = Assembly.GetExecutingAssembly();
@@ -62,11 +62,12 @@ namespace NuGetMcpServer.Tests.Services
             stream.Position = 0;
 
             // Test loading from memory
-            var loadedAssembly = _packageService.LoadAssemblyFromMemory(stream.ToArray());
+            var (loadedAssembly, types) = _packageService.LoadAssemblyFromMemoryWithTypes(stream.ToArray());
 
             // Assert
             Assert.NotNull(loadedAssembly);
-            TestOutput.WriteLine($"Successfully loaded assembly: {loadedAssembly.GetName().Name}");
+            Assert.NotEmpty(types);
+            TestOutput.WriteLine($"Successfully loaded assembly: {loadedAssembly.GetName().Name} with {types.Length} types");
         }
 
         [Fact]

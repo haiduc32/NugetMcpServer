@@ -39,12 +39,34 @@ public abstract class TestBase(ITestOutputHelper testOutput)
         return new NuGetHttpClientService(NullLogger<NuGetHttpClientService>.Instance, options);
     }
 
+    protected NuGetRepositoryService CreateNuGetRepositoryService()
+    {
+        var configuration = new NuGetConfiguration
+        {
+            Sources =
+            [
+                new NuGetSourceConfiguration
+                {
+                    Name = "nuget.org",
+                    Url = "https://api.nuget.org/v3-flatcontainer/",
+                    IsEnabled = true,
+                    Priority = 100
+                }
+            ],
+            DefaultTimeoutSeconds = 30,
+            MaxRetryAttempts = 3
+        };
+        
+        var options = Options.Create(configuration);
+        return new NuGetRepositoryService(NullLogger<NuGetRepositoryService>.Instance, options);
+    }
+
     protected NuGetPackageService CreateNuGetPackageService()
     {
-        var httpClientService = CreateNuGetHttpClientService();
+        var repositoryService = CreateNuGetRepositoryService();
         var metaPackageDetector = CreateMetaPackageDetector();
         var azureDevOpsService = new AzureDevOpsPackageService(NullLogger<AzureDevOpsPackageService>.Instance);
-        return new NuGetPackageService(NullLogger<NuGetPackageService>.Instance, httpClientService, metaPackageDetector, azureDevOpsService);
+        return new NuGetPackageService(NullLogger<NuGetPackageService>.Instance, repositoryService, metaPackageDetector, azureDevOpsService);
     }
 
     protected ArchiveProcessingService CreateArchiveProcessingService()

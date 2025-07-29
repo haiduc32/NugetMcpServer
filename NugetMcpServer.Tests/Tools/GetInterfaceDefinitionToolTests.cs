@@ -69,8 +69,7 @@ namespace NuGetMcpServer.Tests.Tools
         {
             // This test verifies that both tools can work together on the same package
             var listToolLogger = new TestLogger<ListInterfacesTool>(TestOutput);
-            var archiveProcessingService = CreateArchiveProcessingService();
-            var listTool = new ListInterfacesTool(listToolLogger, _packageService, archiveProcessingService);
+            var listTool = new ListInterfacesTool(listToolLogger, _packageService);
 
             var packageId = "DimonSmart.MazeGenerator";
 

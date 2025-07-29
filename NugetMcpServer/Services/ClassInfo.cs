@@ -10,4 +10,5 @@ public class ClassInfo
     public bool IsStatic { get; set; }
     public bool IsAbstract { get; set; }
     public bool IsSealed { get; set; }
+    public string? XmlDocumentation { get; set; }
 }

@@ -10,17 +10,19 @@ using Moq;
 using Moq.Protected;
 using NuGetMcpServer.Models;
 using NuGetMcpServer.Services;
+using NuGetMcpServer.Tests.Helpers;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace NuGetMcpServer.Tests.Services;
 
-public class NuGetPackageServiceMultiSourceTests
+public class NuGetPackageServiceMultiSourceTests : TestBase
 {
     private readonly Mock<NuGetHttpClientService> _mockHttpClientService;
     private readonly Mock<MetaPackageDetector> _mockMetaPackageDetector;
     private readonly NuGetPackageService _packageService;
 
-    public NuGetPackageServiceMultiSourceTests()
+    public NuGetPackageServiceMultiSourceTests(ITestOutputHelper testOutput) : base(testOutput)
     {
         _mockHttpClientService = new Mock<NuGetHttpClientService>(
             NullLogger<NuGetHttpClientService>.Instance,
@@ -29,9 +31,10 @@ public class NuGetPackageServiceMultiSourceTests
         _mockMetaPackageDetector = new Mock<MetaPackageDetector>(
             NullLogger<MetaPackageDetector>.Instance);
         
+        var repositoryService = CreateNuGetRepositoryService();
         _packageService = new NuGetPackageService(
             NullLogger<NuGetPackageService>.Instance,
-            _mockHttpClientService.Object,
+            repositoryService,
             _mockMetaPackageDetector.Object,
             new AzureDevOpsPackageService(NullLogger<AzureDevOpsPackageService>.Instance));
     }

@@ -20,9 +20,8 @@ using static NuGetMcpServer.Extensions.ExceptionHandlingExtensions;
 namespace NuGetMcpServer.Tools;
 
 [McpServerToolType]
-public class ListInterfacesTool(ILogger<ListInterfacesTool> logger, NuGetPackageService packageService, ArchiveProcessingService archiveProcessingService) : McpToolBase<ListInterfacesTool>(logger, packageService)
+public class ListInterfacesTool(ILogger<ListInterfacesTool> logger, NuGetPackageService packageService) : McpToolBase<ListInterfacesTool>(logger, packageService)
 {
-    private readonly ArchiveProcessingService _archiveProcessingService = archiveProcessingService;
     [McpServerTool]
     [Description("Lists all public interfaces available in a specified NuGet package.")]
     public Task<InterfaceListResult> list_interfaces(
@@ -71,31 +70,11 @@ public class ListInterfacesTool(ILogger<ListInterfacesTool> logger, NuGetPackage
 
         progress.ReportMessage("Scanning assemblies for interfaces");
         packageStream.Position = 0;
-        using var packageReader = new PackageArchiveReader(packageStream, leaveStreamOpen: true);
-
-        var loadedAssemblies = _archiveProcessingService.LoadAllAssembliesFromPackage(packageReader);
-
-        foreach (var assemblyInfo in loadedAssemblies)
-        {
-            Logger.LogInformation("Processing archive entry: {AssemblyName}", assemblyInfo.AssemblyName);
-
-            var interfaces = assemblyInfo.Types
-                .Where(t => t.IsInterface && t.IsPublic)
-                .ToList();
-
-            Logger.LogInformation("Found {InterfaceCount} interfaces in {AssemblyName}", interfaces.Count, assemblyInfo.AssemblyName);
-
-            foreach (var iface in interfaces)
-            {
-                Logger.LogDebug("Found interface: {InterfaceName} ({FullName})", iface.Name, iface.FullName);
-                result.Interfaces.Add(new InterfaceInfo
-                {
-                    Name = iface.Name,
-                    FullName = iface.FullName ?? string.Empty,
-                    AssemblyName = assemblyInfo.AssemblyName
-                });
-            }
-        }
+        
+        // Use the new metadata approach with XML documentation
+        var interfaceInfos = PackageService.GetPackageInterfacesWithDocumentation(packageStream);
+        
+        result.Interfaces.AddRange(interfaceInfos);
 
         progress.ReportMessage($"Interface listing completed - Found {result.Interfaces.Count} interfaces");
 

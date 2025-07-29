@@ -22,7 +22,7 @@ namespace NuGetMcpServer.Tests.Tools
 
             _packageService = CreateNuGetPackageService();
             _archiveProcessingService = CreateArchiveProcessingService();
-            _listTool = new ListInterfacesTool(_listToolLogger, _packageService, _archiveProcessingService);
+            _listTool = new ListInterfacesTool(_listToolLogger, _packageService);
         }
 
         [Fact]

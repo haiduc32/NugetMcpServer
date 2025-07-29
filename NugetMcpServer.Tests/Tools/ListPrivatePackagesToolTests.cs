@@ -26,11 +26,12 @@ public class ListPrivatePackagesToolTests : TestBase
         _toolLogger = new TestLogger<ListPrivatePackagesTool>(TestOutput);
         
         // Use real services for integration testing
+        var repositoryService = CreateNuGetRepositoryService();
         var httpClientService = CreateNuGetHttpClientService();
         var azureDevOpsService = new AzureDevOpsPackageService(new TestLogger<AzureDevOpsPackageService>(TestOutput));
         var packageService = CreateNuGetPackageService();
         
-        _tool = new ListPrivatePackagesTool(_toolLogger, httpClientService, azureDevOpsService, packageService);
+        _tool = new ListPrivatePackagesTool(_toolLogger, repositoryService, azureDevOpsService, packageService, httpClientService);
     }
 
     [Fact]
@@ -141,9 +142,10 @@ public class ListPrivatePackagesToolTests : TestBase
         var config = new NuGetConfiguration { Sources = [source] };
         var options = Options.Create(config);
         var httpService = new NuGetHttpClientService(NullLogger<NuGetHttpClientService>.Instance, options);
+        var repositoryService = new NuGetRepositoryService(NullLogger<NuGetRepositoryService>.Instance, options);
         var azureService = new AzureDevOpsPackageService(NullLogger<AzureDevOpsPackageService>.Instance);
         var packageService = CreateNuGetPackageService();
-        var tool = new ListPrivatePackagesTool(NullLogger<ListPrivatePackagesTool>.Instance, httpService, azureService, packageService);
+        var tool = new ListPrivatePackagesTool(NullLogger<ListPrivatePackagesTool>.Instance, repositoryService, azureService, packageService, httpService);
 
         // Act
         var result = await tool.list_private_packages();
@@ -171,9 +173,10 @@ public class ListPrivatePackagesToolTests : TestBase
         var config = new NuGetConfiguration { Sources = [source] };
         var options = Options.Create(config);
         var httpService = new NuGetHttpClientService(NullLogger<NuGetHttpClientService>.Instance, options);
+        var repositoryService = new NuGetRepositoryService(NullLogger<NuGetRepositoryService>.Instance, options);
         var azureService = new AzureDevOpsPackageService(NullLogger<AzureDevOpsPackageService>.Instance);
         var packageService = CreateNuGetPackageService();
-        var tool = new ListPrivatePackagesTool(NullLogger<ListPrivatePackagesTool>.Instance, httpService, azureService, packageService);
+        var tool = new ListPrivatePackagesTool(NullLogger<ListPrivatePackagesTool>.Instance, repositoryService, azureService, packageService, httpService);
 
         // Act
         var result = await tool.list_private_packages();
@@ -203,9 +206,10 @@ public class ListPrivatePackagesToolTests : TestBase
         var config = new NuGetConfiguration { Sources = [source] };
         var options = Options.Create(config);
         var httpService = new NuGetHttpClientService(NullLogger<NuGetHttpClientService>.Instance, options);
+        var repositoryService = new NuGetRepositoryService(NullLogger<NuGetRepositoryService>.Instance, options);
         var azureService = new AzureDevOpsPackageService(NullLogger<AzureDevOpsPackageService>.Instance);
         var packageService = CreateNuGetPackageService();
-        var tool = new ListPrivatePackagesTool(NullLogger<ListPrivatePackagesTool>.Instance, httpService, azureService, packageService);
+        var tool = new ListPrivatePackagesTool(NullLogger<ListPrivatePackagesTool>.Instance, repositoryService, azureService, packageService, httpService);
 
         // Act
         var result = await tool.list_private_packages();
@@ -231,9 +235,10 @@ public class ListPrivatePackagesToolTests : TestBase
         var config = new NuGetConfiguration { Sources = sources };
         var options = Options.Create(config);
         var httpService = new NuGetHttpClientService(NullLogger<NuGetHttpClientService>.Instance, options);
+        var repositoryService = new NuGetRepositoryService(NullLogger<NuGetRepositoryService>.Instance, options);
         var azureService = new AzureDevOpsPackageService(NullLogger<AzureDevOpsPackageService>.Instance);
         var packageService = CreateNuGetPackageService();
-        var tool = new ListPrivatePackagesTool(NullLogger<ListPrivatePackagesTool>.Instance, httpService, azureService, packageService);
+        var tool = new ListPrivatePackagesTool(NullLogger<ListPrivatePackagesTool>.Instance, repositoryService, azureService, packageService, httpService);
 
         // Act
         var result = await tool.list_private_packages();
@@ -259,9 +264,10 @@ public class ListPrivatePackagesToolTests : TestBase
         var config = new NuGetConfiguration { Sources = sources };
         var options = Options.Create(config);
         var httpService = new NuGetHttpClientService(NullLogger<NuGetHttpClientService>.Instance, options);
+        var repositoryService = new NuGetRepositoryService(NullLogger<NuGetRepositoryService>.Instance, options);
         var azureService = new AzureDevOpsPackageService(NullLogger<AzureDevOpsPackageService>.Instance);
         var packageService = CreateNuGetPackageService();
-        var tool = new ListPrivatePackagesTool(NullLogger<ListPrivatePackagesTool>.Instance, httpService, azureService, packageService);
+        var tool = new ListPrivatePackagesTool(NullLogger<ListPrivatePackagesTool>.Instance, repositoryService, azureService, packageService, httpService);
 
         // Act
         var result = await tool.list_private_packages();
@@ -295,9 +301,10 @@ public class ListPrivatePackagesToolTests : TestBase
         var config = new NuGetConfiguration { Sources = [source] };
         var options = Options.Create(config);
         var httpService = new NuGetHttpClientService(NullLogger<NuGetHttpClientService>.Instance, options);
+        var repositoryService = new NuGetRepositoryService(NullLogger<NuGetRepositoryService>.Instance, options);
         var azureService = new AzureDevOpsPackageService(NullLogger<AzureDevOpsPackageService>.Instance);
         var packageService = CreateNuGetPackageService();
-        var tool = new ListPrivatePackagesTool(NullLogger<ListPrivatePackagesTool>.Instance, httpService, azureService, packageService);
+        var tool = new ListPrivatePackagesTool(NullLogger<ListPrivatePackagesTool>.Instance, repositoryService, azureService, packageService, httpService);
 
         // Act
         var result = await tool.list_private_packages();

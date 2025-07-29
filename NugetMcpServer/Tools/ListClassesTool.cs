@@ -73,25 +73,10 @@ public class ListClassesTool(ILogger<ListClassesTool> logger, NuGetPackageServic
         progress.ReportMessage("Scanning assemblies for classes");
         packageStream.Position = 0;
         
-        // Use the new metadata-only approach to avoid loading assemblies
-        var classNames = PackageService.GetPackageClassesWithoutLoading(packageStream);
+        // Use the new metadata approach with XML documentation
+        var classInfos = PackageService.GetPackageClassesWithDocumentation(packageStream);
         
-        foreach (var className in classNames)
-        {
-            // Parse the class information from the metadata
-            var lastDotIndex = className.LastIndexOf('.');
-            var name = lastDotIndex >= 0 ? className.Substring(lastDotIndex + 1) : className;
-            
-            result.Classes.Add(new ClassInfo
-            {
-                Name = name,
-                FullName = className,
-                AssemblyName = "Unknown", // Assembly name not available from metadata-only approach
-                IsStatic = false, // These flags require reflection, not available from metadata-only
-                IsAbstract = false,
-                IsSealed = false
-            });
-        }
+        result.Classes.AddRange(classInfos);
 
         progress.ReportMessage($"Class listing completed - Found {result.Classes.Count} classes");
 
